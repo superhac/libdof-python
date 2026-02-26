@@ -27,22 +27,12 @@ jobs:
             wrapper_lib: libdof_python.so
 
           # ----------------------------------------------------------------
-          # macOS arm64  (Apple Silicon — macos-latest is now arm64)
+          # macOS arm64  (Apple Silicon)
           # ----------------------------------------------------------------
           - name: macOS arm64
             os: macos-latest
             platform: macos
             arch: arm64
-            dof_lib_glob: 'libdof/build/libdof*.dylib'
-            wrapper_lib: libdof_python.dylib
-
-          # ----------------------------------------------------------------
-          # macOS x64  (Intel — last x64 macOS runner is macos-13)
-          # ----------------------------------------------------------------
-          - name: macOS x64
-            os: macos-13
-            platform: macos
-            arch: x64
             dof_lib_glob: 'libdof/build/libdof*.dylib'
             wrapper_lib: libdof_python.dylib
 
@@ -73,8 +63,24 @@ jobs:
           path: libdof
 
       # --------------------------------------------------------------------
+      # Install system build tools needed by libdof's external.sh scripts
+      # --------------------------------------------------------------------
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf automake libtool \
+            cmake build-essential \
+            libusb-1.0-0-dev
+
+      - name: Install build tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install autoconf automake libtool cmake
+
+      # --------------------------------------------------------------------
       # External dependencies — libdof bundles a script per platform/arch
-      # that downloads prebuilt hidapi, libusb, libftdi, libserialport
+      # that downloads and builds hidapi, libusb, libftdi, libserialport
       # --------------------------------------------------------------------
       - name: Fetch external dependencies (Linux / macOS)
         if: runner.os != 'Windows'

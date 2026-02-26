@@ -138,6 +138,46 @@ The `type` argument accepts a single-character `str`, a `bytes` object, or a raw
 
 ---
 
+## Using a pre-built release in your own project
+
+Download the zip for your platform from the [Releases](../../releases) page and unzip it into your project. All files must stay in the **same directory** — `dof.py` loads `libdof_python.so` (or `.dylib`/`.dll`) from its own directory, and that library finds `libdof` and the hardware driver libs via the same directory.
+
+Recommended layout:
+
+```
+your_project/
+├── main.py
+└── external/
+    └── dof/
+        ├── dof.py
+        ├── libdof_python.so   # (or .dylib on macOS, .dll on Windows)
+        ├── libdof.so          # (or .dylib / dof64.dll)
+        └── libusb*.so / libserialport*.so / libftdi*.so / ...
+```
+
+Then in your code:
+
+```python
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'external/dof'))
+import dof
+
+dof.set_base_path(os.path.expanduser('~/.vpinball/'))
+dof.set_log_callback(lambda level, msg: print(f'[DOF] {msg}'))
+
+with dof.DOF() as d:
+    d.init('afm')
+    d.data_receive('S', 27, 1)
+```
+
+Using `os.path.dirname(__file__)` makes the path relative to your script, so it works on any machine without hardcoding.
+
+> **Note:** DOF still needs its configuration files at runtime — see [Step 3](#step-3--set-up-dof-config-files) above.
+
+---
+
 ## How it works
 
 Python's `ctypes` cannot call C++ methods directly (mangled names, ABI differences) and cannot handle `va_list` arguments. The solution is a two-layer bridge:

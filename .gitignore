@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Compiled libraries
+*.so
+*.dylib
+*.dll
+*.lib
+*.pyd
+
+# Build artifacts
+build/
+dist/

@@ -65,7 +65,7 @@ jobs:
           path: libdof
 
       # --------------------------------------------------------------------
-      # Linux build deps
+      # Linux deps
       # --------------------------------------------------------------------
       - name: Install build tools (Linux)
         if: runner.os == 'Linux'
@@ -78,16 +78,16 @@ jobs:
             libudev-dev
 
       # --------------------------------------------------------------------
-      # macOS build deps
+      # macOS deps
       # --------------------------------------------------------------------
       - name: Install build tools (macOS)
         if: runner.os == 'macOS'
         run: brew install autoconf automake libtool cmake
 
       # --------------------------------------------------------------------
-      # Setup MSVC (Windows)
+      # Setup MSVC
       # --------------------------------------------------------------------
-      - name: Setup MSVC environment (Windows)
+      - name: Setup MSVC (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
         with:
@@ -95,10 +95,8 @@ jobs:
 
       # --------------------------------------------------------------------
       # Setup MSYS2 (FIXED)
-      # update: true is critical
-      # path-type: inherit allows MSYS2 to see MSVC tools
       # --------------------------------------------------------------------
-      - name: Setup MSYS2 with cmake and make (Windows)
+      - name: Setup MSYS2 (Windows)
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2
         with:
@@ -110,15 +108,13 @@ jobs:
             make
 
       # --------------------------------------------------------------------
-      # Fetch external dependencies
+      # Fetch external deps
       # --------------------------------------------------------------------
       - name: Fetch external dependencies (Linux / macOS)
         if: runner.os != 'Windows'
         run: bash platforms/${{ matrix.platform }}/${{ matrix.arch }}/external.sh
         working-directory: libdof
 
-      # IMPORTANT:
-      # Run external.sh inside MSYS2 shell on Windows
       - name: Fetch external dependencies (Windows)
         if: runner.os == 'Windows'
         shell: msys2 {0}
@@ -126,9 +122,21 @@ jobs:
         working-directory: libdof
 
       # --------------------------------------------------------------------
-      # Build libdof
+      # Configure libdof
       # --------------------------------------------------------------------
-      - name: Configure libdof
+      - name: Configure libdof (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          cmake -G "Visual Studio 17 2022" -A x64 ^
+            -DPLATFORM=${{ matrix.platform }} ^
+            -DARCH=${{ matrix.arch }} ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -B build
+        working-directory: libdof
+
+      - name: Configure libdof (Linux / macOS)
+        if: runner.os != 'Windows'
         run: >
           cmake
           -DPLATFORM=${{ matrix.platform }}
@@ -137,6 +145,9 @@ jobs:
           -B build
         working-directory: libdof
 
+      # --------------------------------------------------------------------
+      # Build libdof
+      # --------------------------------------------------------------------
       - name: Build libdof
         run: cmake --build build --config Release
         working-directory: libdof
@@ -223,21 +234,18 @@ jobs:
       contents: write
 
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Zip each platform bundle
+      - name: Zip bundles
         run: |
           cd artifacts
           for dir in */; do
             zip -r "../${dir%/}.zip" "$dir"
           done
-          cd ..
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           files: '*.zip'
           generate_release_notes: true

@@ -60,10 +60,10 @@ If libdof is cloned as a sibling directory (`../libdof`) the defaults work with 
 
 ### Step 3 — Set up DOF config files
 
-DOF requires its configuration files at runtime. By default it looks in `~/.vpinball/directoutputconfig/`. The minimum required file is:
+DOF requires its configuration files at runtime. By default it looks in `~/.local/share/VPinballX/10.8/directoutputconfig/`. The minimum required file is:
 
 ```
-~/.vpinball/directoutputconfig/GlobalConfig_B2SServer.xml
+~/.local/share/VPinballX/10.8/directoutputconfig/GlobalConfig_B2SServer.xml
 ```
 
 Full DOF config packages are available from the [DOF project](http://directoutputframework.com/).
@@ -77,7 +77,7 @@ python3 example.py --rom afm
 
 ```bash
 # With debug logging and a custom config path:
-python3 example.py --rom afm --base-path /home/user/.vpinball/ --debug
+python3 example.py --rom afm --base-path ~/.local/share/VPinballX/10.8/directoutputconfig/ --debug
 ```
 
 Available built-in ROM sequences: `afm`, `tna`, `ij_l7`, `gw`
@@ -94,7 +94,7 @@ Call these before creating any `DOF` instance.
 import dof
 
 # Directory containing directoutputconfig/ (default: ~/.vpinball/)
-dof.set_base_path('/home/user/.vpinball/')
+dof.set_base_path('~/.local/share/VPinballX/10.8/directoutputconfig/')
 
 # Minimum log level: LogLevel.INFO / WARN / ERROR / DEBUG
 dof.set_log_level(dof.LogLevel.DEBUG)

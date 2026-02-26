@@ -94,7 +94,9 @@ jobs:
           arch: x64
 
       # --------------------------------------------------------------------
-      # Setup MSYS2 (FIXED)
+      # Setup MSYS2 (Windows)
+      # cmake is installed so the MSYS2 subprocess that external.sh spawns
+      # for libftdi has cmake available at /usr/bin/cmake.
       # --------------------------------------------------------------------
       - name: Setup MSYS2 (Windows)
         if: runner.os == 'Windows'
@@ -104,7 +106,17 @@ jobs:
           update: true
           path-type: inherit
           install: >-
+            cmake
             make
+
+      # Prepend the Windows cmake AFTER setup-msys2 finishes adding MSYS2
+      # paths, so the Windows cmake wins in the bash context (hidapi needs
+      # "Visual Studio 17 2022").  MSYS2 subprocesses prepend /usr/bin
+      # themselves, so they still see their own cmake first (needed by libftdi).
+      - name: Prepend Windows CMake to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "C:/Program Files/CMake/bin" >> "$GITHUB_PATH"
 
       # --------------------------------------------------------------------
       # Fetch external deps
@@ -117,6 +129,8 @@ jobs:
       - name: Fetch external dependencies (Windows)
         if: runner.os == 'Windows'
         shell: bash
+        env:
+          MSYS2_PATH_TYPE: inherit
         run: bash platforms/${{ matrix.platform }}/${{ matrix.arch }}/external.sh
         working-directory: libdof
 

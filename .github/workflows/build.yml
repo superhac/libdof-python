@@ -85,7 +85,7 @@ jobs:
         run: brew install autoconf automake libtool cmake
 
       # --------------------------------------------------------------------
-      # Setup MSVC
+      # Setup MSVC (adds msbuild + cl.exe to PATH)
       # --------------------------------------------------------------------
       - name: Setup MSVC (Windows)
         if: runner.os == 'Windows'
@@ -94,29 +94,20 @@ jobs:
           arch: x64
 
       # --------------------------------------------------------------------
-      # Setup MSYS2 (Windows)
-      # cmake is installed so the MSYS2 subprocess that external.sh spawns
-      # for libftdi has cmake available at /usr/bin/cmake.
+      # Install MSYS2 packages needed by external.sh
+      # external.sh hard-codes MSYS2_PATH=/c/msys64, so install directly
+      # into that installation via pacman.
+      # mingw-w64-x86_64-cmake lands in /mingw64/bin (not /usr/bin), so it
+      # is invisible to Git Bash (shell: bash) — Windows cmake wins for
+      # hidapi.  Inside the MSYS2 subprocess external.sh spawns for libftdi,
+      # MSYSTEM=MINGW64 puts /mingw64/bin first, so MINGW cmake wins there.
       # --------------------------------------------------------------------
-      - name: Setup MSYS2 (Windows)
-        if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MSYS
-          update: true
-          path-type: inherit
-          install: >-
-            cmake
-            make
-
-      # Prepend the Windows cmake AFTER setup-msys2 finishes adding MSYS2
-      # paths, so the Windows cmake wins in the bash context (hidapi needs
-      # "Visual Studio 17 2022").  MSYS2 subprocesses prepend /usr/bin
-      # themselves, so they still see their own cmake first (needed by libftdi).
-      - name: Prepend Windows CMake to PATH (Windows)
+      - name: Install MSYS2 packages (Windows)
         if: runner.os == 'Windows'
         shell: bash
-        run: echo "C:/Program Files/CMake/bin" >> "$GITHUB_PATH"
+        run: |
+          /c/msys64/usr/bin/bash.exe -l -c "pacman -S --noconfirm --needed make diffutils"
+          /c/msys64/usr/bin/bash.exe -l -c "pacman -S --noconfirm --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-libwinpthread mingw-w64-x86_64-cmake"
 
       # --------------------------------------------------------------------
       # Fetch external deps
@@ -129,16 +120,12 @@ jobs:
       - name: Fetch external dependencies (Windows)
         if: runner.os == 'Windows'
         shell: bash
-        env:
-          MSYS2_PATH_TYPE: inherit
         run: bash platforms/${{ matrix.platform }}/${{ matrix.arch }}/external.sh
         working-directory: libdof
 
       # --------------------------------------------------------------------
       # Configure libdof
       # --------------------------------------------------------------------
-      # Use the full path to the Windows cmake so msys2/setup-msys2 adding
-      # MSYS2's cmake.exe to the front of PATH doesn't shadow it.
       - name: Configure libdof (Windows)
         if: runner.os == 'Windows'
         shell: cmd

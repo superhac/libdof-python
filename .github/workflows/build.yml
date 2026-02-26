@@ -124,11 +124,13 @@ jobs:
       # --------------------------------------------------------------------
       # Configure libdof
       # --------------------------------------------------------------------
+      # Use the full path to the Windows cmake so msys2/setup-msys2 adding
+      # MSYS2's cmake.exe to the front of PATH doesn't shadow it.
       - name: Configure libdof (Windows)
         if: runner.os == 'Windows'
         shell: cmd
         run: |
-          cmake -G "Visual Studio 17 2022" -A x64 ^
+          "C:\Program Files\CMake\bin\cmake.exe" -G "Visual Studio 17 2022" -A x64 ^
             -DPLATFORM=${{ matrix.platform }} ^
             -DARCH=${{ matrix.arch }} ^
             -DCMAKE_BUILD_TYPE=Release ^
@@ -148,7 +150,14 @@ jobs:
       # --------------------------------------------------------------------
       # Build libdof
       # --------------------------------------------------------------------
-      - name: Build libdof
+      - name: Build libdof (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: '"C:\Program Files\CMake\bin\cmake.exe" --build build --config Release'
+        working-directory: libdof
+
+      - name: Build libdof (Linux / macOS)
+        if: runner.os != 'Windows'
         run: cmake --build build --config Release
         working-directory: libdof
 

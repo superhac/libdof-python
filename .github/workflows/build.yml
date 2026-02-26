@@ -11,6 +11,7 @@ jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+
     strategy:
       fail-fast: false
       matrix:
@@ -27,7 +28,7 @@ jobs:
             wrapper_lib: libdof_python.so
 
           # ----------------------------------------------------------------
-          # macOS arm64  (Apple Silicon)
+          # macOS arm64
           # ----------------------------------------------------------------
           - name: macOS arm64
             os: macos-latest
@@ -47,14 +48,15 @@ jobs:
             wrapper_lib: libdof_python.dll
 
     steps:
+
       # --------------------------------------------------------------------
-      # Checkout this repo (Python wrapper)
+      # Checkout wrapper repo
       # --------------------------------------------------------------------
       - name: Checkout
         uses: actions/checkout@v4
 
       # --------------------------------------------------------------------
-      # Checkout libdof alongside it
+      # Checkout libdof
       # --------------------------------------------------------------------
       - name: Checkout libdof
         uses: actions/checkout@v4
@@ -63,7 +65,7 @@ jobs:
           path: libdof
 
       # --------------------------------------------------------------------
-      # Install system build tools needed by libdof's external.sh scripts
+      # Linux build deps
       # --------------------------------------------------------------------
       - name: Install build tools (Linux)
         if: runner.os == 'Linux'
@@ -75,13 +77,15 @@ jobs:
             libusb-1.0-0-dev \
             libudev-dev
 
+      # --------------------------------------------------------------------
+      # macOS build deps
+      # --------------------------------------------------------------------
       - name: Install build tools (macOS)
         if: runner.os == 'macOS'
         run: brew install autoconf automake libtool cmake
 
       # --------------------------------------------------------------------
-      # MSVC must be on PATH before external.sh runs on Windows because
-      # the script calls msbuild.exe to build third-party dependencies
+      # Setup MSVC (Windows)
       # --------------------------------------------------------------------
       - name: Setup MSVC environment (Windows)
         if: runner.os == 'Windows'
@@ -89,39 +93,35 @@ jobs:
         with:
           arch: x64
 
-      # external.sh explicitly uses C:\msys64, so we must target that
-      # installation directly rather than using msys2/setup-msys2 (which
-      # may manage a different instance).
-      #
-      # 1. pacman: install cmake + make into C:\msys64\usr\bin so they are
-      #    found without relying on Windows PATH conversion (no spaces issue).
-      # 2. GITHUB_ENV: sets MSYS2_PATH_TYPE=inherit for all subsequent step
-      #    environments — inherited by non-login bash subprocesses.
-      # 3. profile.d: sets MSYS2_PATH_TYPE=inherit for login bash subprocesses
-      #    (-l / --login) that re-read /etc/profile.d on startup.
-      #
-      # With MSYS2_PATH_TYPE=inherit, every MSYS2 bash can see cl.exe and
-      # msbuild.exe that ilammy/msvc-dev-cmd placed on the Windows PATH.
-      - name: Prepare C:\msys64 for libdof Windows build
+      # --------------------------------------------------------------------
+      # Setup MSYS2 (FIXED)
+      # update: true is critical
+      # path-type: inherit allows MSYS2 to see MSVC tools
+      # --------------------------------------------------------------------
+      - name: Setup MSYS2 with cmake and make (Windows)
         if: runner.os == 'Windows'
-        shell: cmd
-        run: |
-          C:\msys64\usr\bin\pacman.exe -S --noconfirm --needed cmake make
-          echo MSYS2_PATH_TYPE=inherit>> %GITHUB_ENV%
-          C:\msys64\usr\bin\bash.exe -c "echo 'export MSYS2_PATH_TYPE=inherit' > /etc/profile.d/00-msvc-path.sh"
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MSYS
+          update: true
+          path-type: inherit
+          install: >-
+            cmake
+            make
 
       # --------------------------------------------------------------------
-      # External dependencies — libdof bundles a script per platform/arch
-      # that downloads and builds hidapi, libusb, libftdi, libserialport
+      # Fetch external dependencies
       # --------------------------------------------------------------------
       - name: Fetch external dependencies (Linux / macOS)
         if: runner.os != 'Windows'
         run: bash platforms/${{ matrix.platform }}/${{ matrix.arch }}/external.sh
         working-directory: libdof
 
+      # IMPORTANT:
+      # Run external.sh inside MSYS2 shell on Windows
       - name: Fetch external dependencies (Windows)
         if: runner.os == 'Windows'
-        shell: bash
+        shell: msys2 {0}
         run: bash platforms/${{ matrix.platform }}/${{ matrix.arch }}/external.sh
         working-directory: libdof
 
@@ -142,7 +142,7 @@ jobs:
         working-directory: libdof
 
       # --------------------------------------------------------------------
-      # Build the Python C wrapper — libdof_python.so / .dylib / .dll
+      # Build Python wrapper
       # --------------------------------------------------------------------
       - name: Build Python wrapper (Linux)
         if: matrix.platform == 'linux'
@@ -181,7 +181,7 @@ jobs:
             libdof\build\Release\dof64.lib
 
       # --------------------------------------------------------------------
-      # Collect everything into a dist/ folder for upload
+      # Collect artifacts
       # --------------------------------------------------------------------
       - name: Collect artifacts (Linux / macOS)
         if: runner.os != 'Windows'
@@ -212,7 +212,7 @@ jobs:
           path: dist/
 
   # --------------------------------------------------------------------------
-  # On a version tag (v*), zip the artifacts and attach them to a GH release
+  # Release job
   # --------------------------------------------------------------------------
   release:
     name: Create Release

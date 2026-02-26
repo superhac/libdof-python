@@ -89,18 +89,14 @@ jobs:
         with:
           arch: x64
 
-      # Git Bash on Windows doesn't automatically inherit cmake or msbuild
-      # from the system PATH — add them explicitly so external.sh can use them
-      - name: Add cmake and msbuild to bash PATH (Windows)
+      # external.sh spawns its own MSYS2 subprocess which has a completely
+      # separate environment — $GITHUB_PATH doesn't reach it.
+      # Install cmake (and make) directly into the MSYS2 package tree so
+      # every MSYS2 process on this runner can find them.
+      - name: Install cmake and make into MSYS2 (Windows)
         if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          echo "/c/Program Files/CMake/bin" >> $GITHUB_PATH
-          # MSBuild location varies by VS edition; find it and add it
-          MSBUILD_DIR=$(cmd.exe /c "vswhere.exe -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe" 2>/dev/null | xargs dirname | tr '\\' '/')
-          if [ -n "$MSBUILD_DIR" ]; then
-            echo "$MSBUILD_DIR" >> $GITHUB_PATH
-          fi
+        shell: cmd
+        run: C:\msys64\usr\bin\pacman.exe -S --noconfirm --needed cmake make
 
       # --------------------------------------------------------------------
       # External dependencies — libdof bundles a script per platform/arch

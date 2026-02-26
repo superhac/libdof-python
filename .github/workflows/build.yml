@@ -104,7 +104,6 @@ jobs:
           update: true
           path-type: inherit
           install: >-
-            cmake
             make
 
       # --------------------------------------------------------------------
@@ -117,7 +116,7 @@ jobs:
 
       - name: Fetch external dependencies (Windows)
         if: runner.os == 'Windows'
-        shell: msys2 {0}
+        shell: bash
         run: bash platforms/${{ matrix.platform }}/${{ matrix.arch }}/external.sh
         working-directory: libdof
 

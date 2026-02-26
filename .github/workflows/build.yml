@@ -89,20 +89,26 @@ jobs:
         with:
           arch: x64
 
-      # Use the official msys2/setup-msys2 action which correctly configures
-      # MSYS2 for GitHub Actions. path-type: inherit makes MSYS2 include the
-      # Windows PATH so every MSYS2 subprocess can see cl.exe, msbuild.exe,
-      # and cmake.exe that ilammy/msvc-dev-cmd placed there.
-      # cmake and make are also installed directly into MSYS2 (/usr/bin) so
-      # they are found even if path conversion of "Program Files" causes issues.
-      - name: Setup MSYS2 with cmake and inherited PATH (Windows)
+      # external.sh explicitly uses C:\msys64, so we must target that
+      # installation directly rather than using msys2/setup-msys2 (which
+      # may manage a different instance).
+      #
+      # 1. pacman: install cmake + make into C:\msys64\usr\bin so they are
+      #    found without relying on Windows PATH conversion (no spaces issue).
+      # 2. GITHUB_ENV: sets MSYS2_PATH_TYPE=inherit for all subsequent step
+      #    environments — inherited by non-login bash subprocesses.
+      # 3. profile.d: sets MSYS2_PATH_TYPE=inherit for login bash subprocesses
+      #    (-l / --login) that re-read /etc/profile.d on startup.
+      #
+      # With MSYS2_PATH_TYPE=inherit, every MSYS2 bash can see cl.exe and
+      # msbuild.exe that ilammy/msvc-dev-cmd placed on the Windows PATH.
+      - name: Prepare C:\msys64 for libdof Windows build
         if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MSYS
-          update: false
-          path-type: inherit
-          install: cmake make
+        shell: cmd
+        run: |
+          C:\msys64\usr\bin\pacman.exe -S --noconfirm --needed cmake make
+          echo MSYS2_PATH_TYPE=inherit>> %GITHUB_ENV%
+          C:\msys64\usr\bin\bash.exe -c "echo 'export MSYS2_PATH_TYPE=inherit' > /etc/profile.d/00-msvc-path.sh"
 
       # --------------------------------------------------------------------
       # External dependencies — libdof bundles a script per platform/arch

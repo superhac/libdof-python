@@ -89,6 +89,19 @@ jobs:
         with:
           arch: x64
 
+      # Git Bash on Windows doesn't automatically inherit cmake or msbuild
+      # from the system PATH — add them explicitly so external.sh can use them
+      - name: Add cmake and msbuild to bash PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "/c/Program Files/CMake/bin" >> $GITHUB_PATH
+          # MSBuild location varies by VS edition; find it and add it
+          MSBUILD_DIR=$(cmd.exe /c "vswhere.exe -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe" 2>/dev/null | xargs dirname | tr '\\' '/')
+          if [ -n "$MSBUILD_DIR" ]; then
+            echo "$MSBUILD_DIR" >> $GITHUB_PATH
+          fi
+
       # --------------------------------------------------------------------
       # External dependencies — libdof bundles a script per platform/arch
       # that downloads and builds hidapi, libusb, libftdi, libserialport

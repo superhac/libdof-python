@@ -89,19 +89,20 @@ jobs:
         with:
           arch: x64
 
-      # By default MSYS2 runs with an isolated PATH and cannot see cl.exe,
-      # cmake, or msbuild that ilammy/msvc-dev-cmd put on the Windows PATH.
-      # Setting MSYS2_PATH_TYPE=inherit (via GITHUB_ENV so it applies to all
-      # subsequent steps) tells every MSYS2 process to convert and include
-      # the Windows PATH — making MSVC tools visible inside MSYS2.
-      # We also write it into the MSYS2 profile so child processes started
-      # with a login shell (bash -l) pick it up as well.
-      - name: Make MSVC tools visible inside MSYS2 (Windows)
+      # Use the official msys2/setup-msys2 action which correctly configures
+      # MSYS2 for GitHub Actions. path-type: inherit makes MSYS2 include the
+      # Windows PATH so every MSYS2 subprocess can see cl.exe, msbuild.exe,
+      # and cmake.exe that ilammy/msvc-dev-cmd placed there.
+      # cmake and make are also installed directly into MSYS2 (/usr/bin) so
+      # they are found even if path conversion of "Program Files" causes issues.
+      - name: Setup MSYS2 with cmake and inherited PATH (Windows)
         if: runner.os == 'Windows'
-        shell: cmd
-        run: |
-          echo MSYS2_PATH_TYPE=inherit>> %GITHUB_ENV%
-          C:\msys64\usr\bin\bash.exe -c "echo 'export MSYS2_PATH_TYPE=inherit' >> /etc/profile.d/msvc_path.sh"
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MSYS
+          update: false
+          path-type: inherit
+          install: cmake make
 
       # --------------------------------------------------------------------
       # External dependencies — libdof bundles a script per platform/arch

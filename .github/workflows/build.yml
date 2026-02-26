@@ -72,11 +72,22 @@ jobs:
           sudo apt-get install -y \
             autoconf automake libtool \
             cmake build-essential \
-            libusb-1.0-0-dev
+            libusb-1.0-0-dev \
+            libudev-dev
 
       - name: Install build tools (macOS)
         if: runner.os == 'macOS'
         run: brew install autoconf automake libtool cmake
+
+      # --------------------------------------------------------------------
+      # MSVC must be on PATH before external.sh runs on Windows because
+      # the script calls msbuild.exe to build third-party dependencies
+      # --------------------------------------------------------------------
+      - name: Setup MSVC environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
       # --------------------------------------------------------------------
       # External dependencies — libdof bundles a script per platform/arch
@@ -136,12 +147,6 @@ jobs:
             -ldof \
             -install_name @rpath/${{ matrix.wrapper_lib }} \
             -Wl,-rpath,@loader_path
-
-      - name: Setup MSVC environment (Windows)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
 
       - name: Build Python wrapper (Windows)
         if: runner.os == 'Windows'

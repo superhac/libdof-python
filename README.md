@@ -11,6 +11,7 @@ A Python wrapper for [libdof](https://github.com/jsm174/libdof), the cross-platf
 | `build_wrapper.sh` | Compiles the bridge into `libdof_python.so` |
 | `dof.py` | Python ctypes module — the actual wrapper you import |
 | `example.py` | Demo program with canned test sequences for afm, tna, ij_l7, gw |
+| `ledcontrol_pull.py` | Utility to download and update DOF config files from VPUniverse |
 
 ## Requirements
 
@@ -58,15 +59,54 @@ If libdof is cloned as a sibling directory (`../libdof`) the defaults work with 
 ./build_wrapper.sh
 ```
 
-### Step 3 — Set up DOF config files
+### Step 3 — Download DOF config files
 
-DOF requires its configuration files at runtime. By default it looks in `~/.local/share/VPinballX/10.8/directoutputconfig/`. The minimum required file is:
+Use `ledcontrol_pull.py` to fetch the latest DOF config package from [VPUniverse](https://configtool.vpuniverse.com). You will need a free API key from your VPUniverse account.
 
+```bash
+python3 ledcontrol_pull.py --apikey YOUR_API_KEY
 ```
-~/.local/share/VPinballX/10.8/directoutputconfig/GlobalConfig_B2SServer.xml
-```
 
-Full DOF config packages are available from the [DOF project](https://directoutput.github.io/DirectOutput/index.html).
+On the first run the script will:
+1. Create the target directory if it does not exist
+2. Create `ledcontrol.ini` in that directory with `version=0`
+3. Fetch the current config version from the VPUniverse API
+4. Download and extract the config zip if the online version is newer
+5. Delete the zip and update the stored version in `ledcontrol.ini`
+
+Subsequent runs skip the download when the stored version is already current.
+
+**Default target directories (no `--target` needed):**
+
+| Platform | Path |
+|---|---|
+| Linux | `~/.local/share/VPinballX/10.8/directoutputconfig/` |
+| macOS | `~/Library/Application Support/VPinballX/10.8/directoutputconfig/` |
+| Windows | `%APPDATA%\VPinballX\10.8\directoutputconfig\` |
+
+**All options:**
+
+| Flag | Description |
+|---|---|
+| `-A` / `--apikey KEY` | VPUniverse API key (required for download) |
+| `-T` / `--target PATH` | Override the destination directory |
+| `-F` / `--file NAME` | Zip filename to use while downloading (default: `directoutputconfig.zip`) |
+| `--force` | Download and extract even if the version is already current |
+| `-V` / `--verbose` | Print progress messages |
+| `-D` / `--debug` | Print debug info (HTTP status, paths, versions) |
+
+**Examples:**
+
+```bash
+# Basic update with your API key
+python3 ledcontrol_pull.py --apikey abc123
+
+# Force re-download to a custom path
+python3 ledcontrol_pull.py --apikey abc123 --force --target /opt/vpinball/directoutputconfig/
+
+# Verbose output to see what is happening
+python3 ledcontrol_pull.py --apikey abc123 --verbose
+```
 
 ### Step 4 — Run the example
 

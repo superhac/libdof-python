@@ -66,7 +66,7 @@ DOF requires its configuration files at runtime. By default it looks in `~/.loca
 ~/.local/share/VPinballX/10.8/directoutputconfig/GlobalConfig_B2SServer.xml
 ```
 
-Full DOF config packages are available from the [DOF project](http://directoutputframework.com/).
+Full DOF config packages are available from the [DOF project](https://directoutput.github.io/DirectOutput/index.html).
 
 ### Step 4 — Run the example
 

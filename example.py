@@ -16,6 +16,7 @@ Before running:
 
 import argparse
 import os
+import sys
 import time
 
 import dof
@@ -41,9 +42,21 @@ def log_handler(level: dof.LogLevel, message: str) -> None:
     }.get(level, '[?????]')
     print(f'{tag} {message}')
 
+def _default_base_path() -> str:
+    """Return the platform-specific default VPinballX 10.8 config directory."""
+    home = os.path.expanduser('~')
+    if sys.platform == 'win32':
+        appdata = os.environ.get('APPDATA', home)
+        return os.path.join(appdata, 'VPinballX', '10.8')
+    elif sys.platform == 'darwin':
+        return os.path.join(home, 'Library', 'Application Support', 'VPinballX', '10.8')
+    else:  # Linux / other POSIX
+        return os.path.join(home, '.local', 'share', 'VPinballX', '10.8')
+
+
 dof.set_log_callback(log_handler)
 dof.set_log_level(dof.LogLevel.DEBUG)
-dof.set_base_path(os.path.join(os.path.expanduser('~'), '.vpinball'))
+dof.set_base_path(_default_base_path())
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +168,7 @@ def main() -> None:
     parser.add_argument(
         '--base-path', metavar='PATH',
         default='',
-        help='Path to the DOF config directory (default: ~/.vpinball/)',
+        help='Path to the DOF config directory (default: platform-specific VPinballX/10.8 dir)',
     )
     parser.add_argument(
         '--debug', action='store_true',

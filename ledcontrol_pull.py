@@ -2,6 +2,7 @@
 import argparse
 import os
 import sys
+import tempfile
 import requests
 import zipfile
 
@@ -157,7 +158,7 @@ if param_debug or param_verbose:
 # -------------------------------------------------
 # Version check
 # -------------------------------------------------
-ini_file = os.path.join(param_directoutputconfigpath, "ledcontrol.ini")
+ini_file = os.path.join(os.path.dirname(param_directoutputconfigpath), "dofconfigversion.ini")
 ensure_ini(ini_file)
 
 bDoDownload = False
@@ -194,41 +195,44 @@ if bDoDownload:
     if param_debug or param_verbose:
         print("**** Requesting File ****")
 
-    zip_path = os.path.join(param_directoutputconfigpath, param_savefile)
+    tmp_fd, zip_path = tempfile.mkstemp(suffix=".zip", prefix="dofconfig_")
+    os.close(tmp_fd)
 
-    r = requests.get(download_url, headers=headers, stream=True)
-    if param_debug:
-        print("STATUS:", r.status_code)
-        print("CONTENT-TYPE:", r.headers.get("content-type"))
+    try:
+        r = requests.get(download_url, headers=headers, stream=True)
+        if param_debug:
+            print("STATUS:", r.status_code)
+            print("CONTENT-TYPE:", r.headers.get("content-type"))
 
-    if r.status_code == 200:
-        with open(zip_path, "wb") as f:
-            for chunk in r.iter_content(8192):
-                f.write(chunk)
-    else:
-        print("** Error: Unable to download.")
-        sys.exit(1)
+        if r.status_code == 200:
+            with open(zip_path, "wb") as f:
+                for chunk in r.iter_content(8192):
+                    f.write(chunk)
+        else:
+            print("** Error: Unable to download.")
+            sys.exit(1)
 
-    if not os.path.exists(zip_path) or os.path.getsize(zip_path) < 1024:
-        print("** Error: Archive not downloaded correctly.")
-        sys.exit(1)
+        if not os.path.exists(zip_path) or os.path.getsize(zip_path) < 1024:
+            print("** Error: Archive not downloaded correctly.")
+            sys.exit(1)
 
-    if param_debug or param_verbose:
-        print("**** Extracting Files ****")
-        print("From:", zip_path)
-        print("To:", param_directoutputconfigpath)
+        if param_debug or param_verbose:
+            print("**** Extracting Files ****")
+            print("From:", zip_path)
+            print("To:", param_directoutputconfigpath)
 
-    with zipfile.ZipFile(zip_path, "r") as z:
-        for member in z.infolist():
-            dest = os.path.join(param_directoutputconfigpath, member.filename)
-            if member.is_dir():
-                os.makedirs(dest, exist_ok=True)
-            else:
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
-                with z.open(member) as src, open(dest, "wb") as out:
-                    out.write(src.read())
-
-    os.remove(zip_path)
+        with zipfile.ZipFile(zip_path, "r") as z:
+            for member in z.infolist():
+                dest = os.path.join(param_directoutputconfigpath, member.filename)
+                if member.is_dir():
+                    os.makedirs(dest, exist_ok=True)
+                else:
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    with z.open(member) as src, open(dest, "wb") as out:
+                        out.write(src.read())
+    finally:
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
 
     # Update stored version in INI
     with open(ini_file, 'w') as f:

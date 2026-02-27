@@ -10,6 +10,9 @@ __pycache__/
 *.lib
 *.pyd
 
+# misc
+*.log
+
 # Build artifacts
 build/
 dist/

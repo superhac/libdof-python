@@ -1,46 +1,25 @@
 #!/usr/bin/env python3
-"""
-example.py — libdof Python wrapper demo
-
-Demonstrates how to use dof.py to drive feedback devices on a virtual
-pinball cabinet.  Mirrors the dof_test.cpp behaviour from the upstream
-C++ test tool.
-
-Before running:
-    1. Build libdof (see https://github.com/jsm174/libdof/blob/master/README.md)
-    2. Run ./build_wrapper.sh  (produces libdof_python.so)
-    3. Copy / symlink the DOF config files to ~/.vpinball/directoutputconfig/
-       (or pass a custom path with --base-path)
-    4. python3 example.py [--rom ROM_NAME] [--base-path PATH]
-"""
+"""Simple DOF trigger tool for one pulse or auto-testing a ROM row."""
 
 import argparse
+import glob
 import os
+import re
 import sys
 import time
 
 import dof
 
 
-# ---------------------------------------------------------------------------
-# Configure libdof — mirrors the C++ pattern:
-#
-#   DOF::Config* pConfig = DOF::Config::GetInstance();
-#   pConfig->SetLogCallback(LogCallback);
-#   pConfig->SetLogLevel(DOF_LogLevel_DEBUG);
-#   pConfig->SetBasePath("/Users/jmillard/.vpinball/");
-#
-# Must be done before creating any DOF() instance.
-# ---------------------------------------------------------------------------
-
 def log_handler(level: dof.LogLevel, message: str) -> None:
     tag = {
-        dof.LogLevel.INFO:  '[INFO ]',
-        dof.LogLevel.WARN:  '[WARN ]',
+        dof.LogLevel.INFO: '[INFO ]',
+        dof.LogLevel.WARN: '[WARN ]',
         dof.LogLevel.ERROR: '[ERROR]',
         dof.LogLevel.DEBUG: '[DEBUG]',
     }.get(level, '[?????]')
     print(f'{tag} {message}')
+
 
 def _default_base_path() -> str:
     """Return the platform-specific default VPinballX 10.8 config directory."""
@@ -48,145 +27,196 @@ def _default_base_path() -> str:
     if sys.platform == 'win32':
         appdata = os.environ.get('APPDATA', home)
         return os.path.join(appdata, 'VPinballX', '10.8')
-    elif sys.platform == 'darwin':
+    if sys.platform == 'darwin':
         return os.path.join(home, 'Library', 'Application Support', 'VPinballX', '10.8')
-    else:  # Linux / other POSIX
-        return os.path.join(home, '.local', 'share', 'VPinballX', '10.8')
+    return os.path.join(home, '.local', 'share', 'VPinballX', '10.8')
 
 
-dof.set_log_callback(log_handler)
-dof.set_log_level(dof.LogLevel.DEBUG)
-dof.set_base_path(_default_base_path())
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-TIMEOUT_ON_MS   = 0.650   # seconds
-TIMEOUT_OFF_MS  = 0.650
-TIMEOUT_INIT_MS = 1.0
-
-
-def trigger_on_off(d: dof.DOF,
-                   type_char: str,
-                   number: int,
-                   on_sec: float = TIMEOUT_ON_MS,
-                   off_sec: float = TIMEOUT_OFF_MS) -> None:
-    """Toggle an output on, wait, then off, wait."""
-    print(f'  {type_char}{number:>3d}  on  ({on_sec*1000:.0f} ms)')
-    d.data_receive(type_char, number, 1)
+def trigger_on_off(
+    d: dof.DOF,
+    type_char: str,
+    number: int,
+    on_sec: float,
+    off_sec: float,
+    on_value: int,
+) -> None:
+    print(f'  {type_char}{number:>4d}  on  ({on_sec*1000:.0f} ms) value={on_value}')
+    d.data_receive(type_char, number, on_value)
     time.sleep(on_sec)
-
-    print(f'  {type_char}{number:>3d}  off ({off_sec*1000:.0f} ms)')
+    print(f'  {type_char}{number:>4d}  off ({off_sec*1000:.0f} ms)')
     d.data_receive(type_char, number, 0)
     time.sleep(off_sec)
 
 
-def run_rom(d: dof.DOF, rom_name: str) -> None:
-    """Run a canned test sequence for the given ROM."""
-    print(f'\n{"="*48}')
-    print(f' ROM: {rom_name}')
-    print(f'{"="*48}')
+def split_csv_with_paren_guard(line: str) -> list[str]:
+    parts = []
+    depth = 0
+    start = 0
+    for idx, ch in enumerate(line):
+        if ch == '(':
+            depth += 1
+        elif ch == ')':
+            depth = max(0, depth - 1)
+        elif ch == ',' and depth == 0:
+            parts.append(line[start:idx].strip())
+            start = idx + 1
+    parts.append(line[start:].strip())
+    return parts
 
-    d.init(rom_name)
-    time.sleep(TIMEOUT_INIT_MS)
 
-    sequences = {
-        'afm': [                          # Attack From Mars
-            ('S', 27), ('S', 11), ('S', 28),
-            ('W', 74),
-            ('S',  9), ('S', 25), ('S', 12),
-            ('S', 21), ('S', 23), ('S', 26),
-            ('S', 10), ('S', 17), ('S', 18),
-            ('S', 22),
-            ('W', 38),
-            ('S', 19), ('S', 13), ('S', 20),
-            ('W', 48), ('W', 72),
-            ('S', 39), ('W', 65),
-        ],
-        'tna': [                          # Total Nuclear Annihilation
-            ('E', 103), ('E', 108), ('E', 110), ('E', 112),
-            ('E', 116), ('E', 144), ('E', 146), ('E', 147),
-            ('E', 148), ('E', 149), ('E', 150), ('E', 151),
-            ('E', 152), ('E', 153), ('E', 179),
-        ],
-        'ij_l7': [                        # Indiana Jones L7
-            ('L',  88, 5.0, TIMEOUT_OFF_MS),
-            ('S',  9),  ('S', 12), ('S', 51), ('S', 53),
-            ('W', 15),  ('W', 16), ('W', 65), ('W', 66),
-            ('W', 67),  ('W', 68),
-            ('L',  88), ('S', 10), ('W', 88),
-        ],
-        'gw': [                           # The Getaway High Speed II
-            ('L',  52),
-            ('S',  8), ('S', 12), ('S', 16), ('S', 19),
-            ('S', 46), ('S', 48),
-            ('W', 15), ('W', 25), ('W', 26), ('W', 37),
-            ('W', 38), ('W', 42), ('W', 43), ('W', 52),
-            ('W', 53), ('W', 67), ('W', 78), ('W', 81),
-            ('W', 86), ('W', 87), ('W', 88),
-        ],
-    }
+def resolve_config_ini(base_path: str) -> str:
+    cfg_dir = os.path.join(base_path, 'directoutputconfig')
+    if not os.path.isdir(cfg_dir):
+        raise FileNotFoundError(f'Config directory not found: {cfg_dir}')
 
-    if rom_name not in sequences:
-        print(f'No built-in sequence for "{rom_name}" — sending a simple test pulse.')
-        trigger_on_off(d, 'S', 1)
-    else:
-        for entry in sequences[rom_name]:
-            # Entry can be (type, number) or (type, number, on_sec, off_sec)
-            tc, num = entry[0], entry[1]
-            on_s  = entry[2] if len(entry) > 2 else TIMEOUT_ON_MS
-            off_s = entry[3] if len(entry) > 3 else TIMEOUT_OFF_MS
-            trigger_on_off(d, tc, num, on_s, off_s)
+    preferred = [
+        os.path.join(cfg_dir, 'directoutputconfig40.ini'),
+        os.path.join(cfg_dir, 'directoutputconfig.ini'),
+        os.path.join(cfg_dir, 'ledcontrol.ini'),
+    ]
+    for path in preferred:
+        if os.path.isfile(path):
+            return path
 
+    candidates = sorted(glob.glob(os.path.join(cfg_dir, 'directoutputconfig*.ini')))
+    if not candidates:
+        candidates = sorted(glob.glob(os.path.join(cfg_dir, 'ledcontrol*.ini')))
+    if not candidates:
+        raise FileNotFoundError(f'No directoutputconfig*.ini or ledcontrol*.ini found in {cfg_dir}')
+    return candidates[0]
+
+
+def find_rom_row(ini_path: str, rom_key: str) -> list[str]:
+    in_config = False
+    with open(ini_path, 'r', encoding='utf-8', errors='ignore') as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith('#'):
+                continue
+            if line.startswith('[') and line.endswith(']'):
+                section = line.lower()
+                in_config = section in ('[config dof]', '[config outs]')
+                continue
+            if not in_config:
+                continue
+
+            cols = split_csv_with_paren_guard(line)
+            if cols and cols[0].strip().lower() == rom_key.lower():
+                return cols
+
+    raise ValueError(f'ROM "{rom_key}" not found in {ini_path} [Config DOF]/[Config outs]')
+
+
+def extract_events_from_column(column_expr: str) -> list[tuple[str, int]]:
+    """
+    Extract basic event descriptors from a config column expression.
+    Examples:
+      "E115 I60" -> [("E", 115)]
+      "S24 I60/S32" -> [("S", 24), ("S", 32)]
+      "(W43=0)" -> []
+    """
+    expr = column_expr.strip()
+    if not expr or expr == '0':
+        return []
+
+    settings = [s.strip() for s in expr.split('/') if s.strip()]
+    events: list[tuple[str, int]] = []
+
+    for setting in settings:
+        if setting.startswith('('):
+            continue
+        trigger = setting.split(' ', 1)[0].strip()
+        trigger_parts = [p.strip() for p in trigger.split('|') if p.strip()]
+        for part in trigger_parts:
+            m = re.match(r'^([A-Za-z])(\d+)$', part)
+            if not m:
+                continue
+            t = m.group(1).upper()
+            n = int(m.group(2))
+            events.append((t, n))
+    return events
+
+
+def run_auto_row_test(
+    d: dof.DOF,
+    rom_key: str,
+    ini_path: str,
+    on_sec: float,
+    off_sec: float,
+    on_value: int,
+) -> None:
+    cols = find_rom_row(ini_path, rom_key)
+    events: list[tuple[int, str, int]] = []
+    for idx, column_expr in enumerate(cols[1:], start=1):
+        for event in extract_events_from_column(column_expr):
+            events.append((idx, event[0], event[1]))
+
+    dedup: list[tuple[int, str, int]] = []
+    seen: set[tuple[str, int]] = set()
+    for col, t, n in events:
+        key = (t, n)
+        if key not in seen:
+            seen.add(key)
+            dedup.append((col, t, n))
+
+    if not dedup:
+        raise ValueError(f'No parsable trigger events found for ROM "{rom_key}" row in {ini_path}')
+
+    print(f'Using config row from: {ini_path}')
+    print('Auto-row events:')
+    for col, t, n in dedup:
+        print(f'  col{col}: {t}{n}')
+
+    d.init(rom_key)
+    time.sleep(1.0)
+    for _, t, n in dedup:
+        trigger_on_off(d, t, n, on_sec, off_sec, on_value)
     d.finish()
-
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
-
-AVAILABLE_ROMS = ['afm', 'tna', 'ij_l7', 'gw']
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description='libdof Python wrapper — example / test program',
+        description='Send one DOF pulse or auto-test all trigger events in a ROM row',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            'Available ROMs: ' + ', '.join(AVAILABLE_ROMS) + '\n'
-            '\nExample:\n'
-            '  python3 example.py --rom afm\n'
-            '  python3 example.py --base-path /home/user/.vpinball/\n'
+            'Example:\n'
+            '  python3 example.py --rom "5th Element" --type E --number 115 --on-sec 4 --off-sec 1 --on-value 255\n'
+            '  python3 example.py --rom "5th Element" --auto-row-test --on-sec 1 --off-sec 0.5\n'
         ),
     )
-    parser.add_argument(
-        '--rom', metavar='ROM_NAME',
-        help='ROM to test (default: run all)',
-    )
-    parser.add_argument(
-        '--base-path', metavar='PATH',
-        default='',
-        help='Path to the DOF config directory (default: platform-specific VPinballX/10.8 dir)',
-    )
-    parser.add_argument(
-        '--debug', action='store_true',
-        help='Enable DEBUG-level logging from libdof',
-    )
+    parser.add_argument('--rom', required=True, help='ROM name/key (spaces are normalized to underscores)')
+    parser.add_argument('--type', dest='type_char', default='E', help='Event type char: S, E, W, L, ... (default: E)')
+    parser.add_argument('--number', type=int, default=115, help='Event number, e.g. 115 or 24 (ignored by --auto-row-test)')
+    parser.add_argument('--on-sec', type=float, default=4.0, help='Seconds to keep event ON (default: 4.0)')
+    parser.add_argument('--off-sec', type=float, default=1.0, help='Seconds to wait after OFF (default: 1.0)')
+    parser.add_argument('--on-value', type=int, default=255, help='Value sent for ON (default: 255)')
+    parser.add_argument('--base-path', default='', help='DOF base path (default: platform VPinballX/10.8)')
+    parser.add_argument('--auto-row-test', action='store_true', help='Parse ROM row from directoutputconfig*.ini and trigger each mapped event once')
+    parser.add_argument('--config-ini', default='', help='Optional explicit ini path for --auto-row-test')
+    parser.add_argument('--debug', action='store_true', help='Enable DEBUG-level logging')
     args = parser.parse_args()
 
-    # Allow --base-path and --debug to override the defaults set at the top
-    if args.base_path:
-        dof.set_base_path(args.base_path)
-    if args.debug:
-        dof.set_log_level(dof.LogLevel.DEBUG)
+    dof.set_log_callback(log_handler)
+    dof.set_log_level(dof.LogLevel.DEBUG if args.debug else dof.LogLevel.INFO)
+    dof.set_base_path(args.base_path if args.base_path else _default_base_path())
 
-    roms_to_run = [args.rom] if args.rom else AVAILABLE_ROMS
+    rom_key = args.rom.strip().replace(' ', '_')
+    type_char = args.type_char.strip().upper()
+    if len(type_char) != 1:
+        raise ValueError('--type must be a single character')
 
     with dof.DOF() as d:
-        for rom in roms_to_run:
-            run_rom(d, rom)
+        print(f'\n{"="*48}')
+        print(f' ROM: {args.rom} (key={rom_key})')
+        print(f'{"="*48}')
+        if args.auto_row_test:
+            ini_path = args.config_ini if args.config_ini else resolve_config_ini(args.base_path if args.base_path else _default_base_path())
+            run_auto_row_test(d, rom_key, ini_path, args.on_sec, args.off_sec, args.on_value)
+        else:
+            d.init(rom_key)
+            time.sleep(1.0)
+            trigger_on_off(d, type_char, args.number, args.on_sec, args.off_sec, args.on_value)
+            d.finish()
 
     print('\nDone.')
 

@@ -1,0 +1,24 @@
+{
+  "events": {
+    "x": {
+      "loop": true,
+      "cycle_ms": 5000,
+      "actions": [
+        { "at_ms": 0, "ini_event": "Knocker", "value": 255 },
+        { "at_ms": 0, "ini_event": "Gear", "value": 255 },
+        { "at_ms": 2000, "ini_event": "Knocker", "value": 0 },
+        { "at_ms": 100, "ini_event": "Gear", "value": 0 }
+      ]
+    },
+    "y": {
+      "loop": true,
+      "cycle_ms": 700,
+      "actions": [
+        { "at_ms": 0, "ini_event": "Knocker", "value": 255 },
+        { "at_ms": 180, "ini_event": "Knocker", "value": 0 },
+        { "at_ms": 300, "ini_event": "E115", "value": 255 },
+        { "at_ms": 520, "ini_event": "E115", "value": 0 }
+      ]
+    }
+  }
+}

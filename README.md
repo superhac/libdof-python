@@ -10,7 +10,7 @@ A Python wrapper for [libdof](https://github.com/jsm174/libdof), the cross-platf
 | `dof_c_api.cpp` | C++ implementation — wraps the libdof C++ classes in `extern "C"` functions, and handles `va_list` log formatting so Python never sees it |
 | `build_wrapper.sh` | Compiles the bridge into `libdof_python.so` |
 | `dof.py` | Python ctypes module — the actual wrapper you import |
-| `example.py` | Demo program with canned test sequences for afm, tna, ij_l7, gw |
+| `example.py` | CLI trigger tool: send one DOF event pulse or auto-test all events in a ROM config row |
 | `ledcontrol_pull.py` | Utility to download and update DOF config files from VPUniverse |
 
 ## Requirements
@@ -112,15 +112,82 @@ python3 ledcontrol_pull.py --apikey abc123 --verbose
 
 ```bash
 export LD_LIBRARY_PATH=/path/to/libdof/build:$LD_LIBRARY_PATH
-python3 example.py --rom afm
+python3 example.py --rom "5th Element" --type E --number 115 --on-sec 4 --off-sec 1 --on-value 255
+```
+
+```bash
+# Auto-test all parsed trigger events from the ROM row in directoutputconfig*.ini:
+python3 example.py --rom "5th Element" --auto-row-test --on-sec 1 --off-sec 0.5
 ```
 
 ```bash
 # With debug logging and a custom config path:
-python3 example.py --rom afm --base-path ~/.local/share/VPinballX/10.8/directoutputconfig/ --debug
+python3 example.py --rom "5th Element" --type E --number 115 --base-path ~/.local/share/VPinballX/10.8 --debug
 ```
 
-Available built-in ROM sequences: `afm`, `tna`, `ij_l7`, `gw`
+`example.py --help` shows all current options.
+
+### Step 5 — Run custom, switchable output sequences from a file
+
+Use `sequence_runner.py` with a JSON file that maps event names to timestamped actions.
+Each action must include:
+- `"at_ms"`: when to fire, relative to sequence cycle start (milliseconds)
+- `"ini_event"`: INI column name (example: `Knocker`) or raw token (example: `E115`)
+- `"value"`: output value (`255`/`on` = ON, `0`/`off` = OFF)
+
+Each event can also define:
+- `"loop"`: repeat continuously (default: `true`)
+- `"cycle_ms"`: cycle duration for loop timing
+
+Copy and edit the example:
+
+```bash
+cp sequences.example.json sequences.json
+```
+
+Run:
+
+```bash
+python3 sequence_runner.py --rom "5th Element" --sequence-file sequences.json
+```
+
+`ini_event` name lookup is resolved from the ROM row in `directoutputconfig*.ini` (auto-detected from `--base-path`, or set explicitly with `--config-ini`).
+Actions with the same `at_ms` fire in the same scheduler tick, so overlapping outputs are supported.
+
+Interactive commands:
+
+```text
+list
+start x
+stop
+start y
+quit
+```
+
+Each `start <event>` switches to that event's sequence. If `loop: true`, the sequence repeats until `stop` (or another `start` command) is received.
+
+You can also drive commands from another process by watching a trigger file:
+
+```bash
+python3 sequence_runner.py --rom "5th Element" --sequence-file sequences.json --trigger-file /tmp/dof_triggers.txt
+```
+
+Then append commands from anywhere:
+
+```bash
+echo "start x" >> /tmp/dof_triggers.txt
+echo "stop" >> /tmp/dof_triggers.txt
+echo "start y" >> /tmp/dof_triggers.txt
+```
+
+Example INI mapping:
+
+```text
+# "Rom","Knocker","Gear"
+5th_Element,E115 I60,0
+```
+
+With this row, `"ini_event":"Knocker"` resolves to trigger `E115`.
 
 ---
 

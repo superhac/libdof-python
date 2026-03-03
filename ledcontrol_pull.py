@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import os
+import shutil
 import sys
 import tempfile
 import requests
@@ -40,6 +41,29 @@ def ensure_ini(file_path: str) -> None:
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, 'w') as f:
             f.write('[version]\nversion=0\n')
+
+
+def clear_target_directory(target_path: str, keep_files: set, verbose: bool = False) -> None:
+    """Delete everything in target_path except selected files at the directory root."""
+    keep_lc = {name.lower() for name in keep_files}
+
+    for entry in os.listdir(target_path):
+        entry_path = os.path.join(target_path, entry)
+
+        # Preserve only the explicitly allowed root-level files.
+        if os.path.isfile(entry_path) and entry.lower() in keep_lc:
+            if verbose:
+                print("Keeping:", entry_path)
+            continue
+
+        if os.path.isdir(entry_path) and not os.path.islink(entry_path):
+            shutil.rmtree(entry_path)
+            if verbose:
+                print("Removed directory:", entry_path)
+        else:
+            os.remove(entry_path)
+            if verbose:
+                print("Removed file:", entry_path)
 
 
 def read_ini(file_path, section, key):
@@ -215,6 +239,15 @@ if bDoDownload:
         if not os.path.exists(zip_path) or os.path.getsize(zip_path) < 1024:
             print("** Error: Archive not downloaded correctly.")
             sys.exit(1)
+
+        if param_debug or param_verbose:
+            print("**** Clearing Target Folder ****")
+
+        clear_target_directory(
+            param_directoutputconfigpath,
+            {"cabinet.xml", "GlobalConfig_B2SServer.xml"},
+            verbose=(param_debug or param_verbose),
+        )
 
         if param_debug or param_verbose:
             print("**** Extracting Files ****")

@@ -10,7 +10,7 @@ A Python wrapper for [libdof](https://github.com/jsm174/libdof), the cross-platf
 | `dof_c_api.cpp` | C++ implementation — wraps the libdof C++ classes in `extern "C"` functions, and handles `va_list` log formatting so Python never sees it |
 | `build_wrapper.sh` | Compiles the bridge into `libdof_python.so` |
 | `dof.py` | Python ctypes module — the actual wrapper you import |
-| `example.py` | CLI trigger tool: send one DOF event pulse or auto-test all events in a ROM config row |
+| `example.py` | CLI runner: initialize a ROM and hold until quit; optional random `E` event mode |
 | `ledcontrol_pull.py` | Utility to download and update DOF config files from VPUniverse |
 
 ## Requirements
@@ -112,22 +112,60 @@ python3 ledcontrol_pull.py --apikey abc123 --verbose
 
 ```bash
 export LD_LIBRARY_PATH=/path/to/libdof/build:$LD_LIBRARY_PATH
-python3 example.py --rom "5th Element" --type E --number 115 --on-sec 4 --off-sec 1 --on-value 255
+python3 example.py --rom "5th Element"
 ```
 
 ```bash
-# Auto-test all parsed trigger events from the ROM row in directoutputconfig*.ini:
-python3 example.py --rom "5th Element" --auto-row-test --on-sec 1 --off-sec 0.5
+# Random E-event mode (JS-style random fallback behavior):
+python3 example.py --rom "5th Element" --random-e
 ```
 
 ```bash
-# With debug logging and a custom config path:
-python3 example.py --rom "5th Element" --type E --number 115 --base-path ~/.local/share/VPinballX/10.8 --debug
+# Custom random range and timing:
+python3 example.py --rom "5th Element" --random-e --random-min 900 --random-max 990 --random-interval-sec 0.2 --random-on-value 1
+```
+
+```bash
+# With debug logging and a custom base path:
+python3 example.py --rom "5th Element" --base-path ~/.local/share/VPinballX/10.8 --debug
 ```
 
 `example.py --help` shows all current options.
 
-### Step 5 — Run custom, switchable output sequences from a file
+### Step 5 — Embed Random DOF In Another Program
+
+Use `dof_runner.py` when you want the same behavior as:
+
+```bash
+python3 example.py --rom "pinupmenu" --random-e --random-interval-sec 1.1
+```
+
+but controlled from your own Python process via `start()` / `stop()`.
+
+```python
+from dof_runner import RandomDofRunner
+import time
+
+runner = RandomDofRunner(
+    rom="pinupmenu",
+    random_interval_sec=1.1,
+    random_min=901,
+    random_max=990,
+    random_on_value=1,
+    debug=False,
+)
+
+runner.start()
+time.sleep(10)
+runner.stop()
+```
+
+Important lifecycle behavior:
+- `start()` creates a fresh DOF instance and calls `init()`.
+- `stop()` always signals the worker thread, turns off the last random event, and calls `finish()` + `destroy()`.
+- This is designed so your app can release DOF/controller resources before another DOF client starts.
+
+### Step 6 — Run custom, switchable output sequences from a file
 
 Use `sequence_runner.py` with a JSON file that maps event names to timestamped actions.
 Each action must include:

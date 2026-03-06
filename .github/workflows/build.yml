@@ -213,6 +213,7 @@ jobs:
           cp libdof/third-party/runtime-libs/${{ matrix.platform }}/${{ matrix.arch }}/* dist/ 2>/dev/null || true
           cp dof.py dist/
           cp example.py dist/
+          cp dof_runner.py dist/
 
       - name: Collect artifacts (Windows)
         if: runner.os == 'Windows'
@@ -224,6 +225,7 @@ jobs:
           cp libdof/third-party/runtime-libs/${{ matrix.platform }}/${{ matrix.arch }}/*.dll dist/ 2>/dev/null || true
           cp dof.py dist/
           cp example.py dist/
+          cp dof_runner.py dist/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

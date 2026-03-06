@@ -249,12 +249,59 @@ jobs:
 
       - name: Zip bundles
         run: |
-          cd artifacts
-          for dir in */; do
-            zip -r "../${dir%/}.zip" "$dir"
+          TAG="${GITHUB_REF_NAME}"
+          for dir in artifacts/dof-python-*/; do
+            base="$(basename "${dir%/}")"
+            triplet="${base#dof-python-}"
+            zip_name="dof-python-${TAG}-${triplet}.zip"
+            (
+              cd artifacts
+              zip -r "../${zip_name}" "${base}"
+            )
           done
+
+      - name: Generate checksums
+        run: |
+          sha256sum dof-python-${GITHUB_REF_NAME}-*.zip > checksums.txt
+
+      - name: Generate manifest
+        run: |
+          python3 - <<'PY'
+          import glob
+          import hashlib
+          import json
+          import os
+          import re
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          manifest = {
+              "version": tag,
+              "assets": {}
+          }
+
+          pattern = re.compile(rf"^dof-python-{re.escape(tag)}-(.+)\.zip$")
+          for path in sorted(glob.glob(f"dof-python-{tag}-*.zip")):
+              name = os.path.basename(path)
+              m = pattern.match(name)
+              if not m:
+                  continue
+              triplet = m.group(1)
+              with open(path, "rb") as f:
+                  digest = hashlib.sha256(f.read()).hexdigest()
+              manifest["assets"][triplet] = {
+                  "file": name,
+                  "sha256": digest
+              }
+
+          with open("manifest.json", "w", encoding="utf-8") as f:
+              json.dump(manifest, f, indent=2, sort_keys=True)
+              f.write("\n")
+          PY
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: '*.zip'
+          files: |
+            dof-python-${{ github.ref_name }}-*.zip
+            checksums.txt
+            manifest.json
           generate_release_notes: true

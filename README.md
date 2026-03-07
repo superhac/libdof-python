@@ -126,6 +126,21 @@ python3 example.py --rom "5th Element" --random-e --random-min 900 --random-max 
 ```
 
 ```bash
+# Parse tokens from the ROM row in directoutputconfig*.ini and play each token in sequence:
+python3 example.py --rom "avs_170" --play-rom-tokens --token-on-sec 0.6 --token-off-sec 0.2
+```
+
+```bash
+# Same as above, but loop continuously until quit:
+python3 example.py --rom "avs_170" --play-rom-tokens --token-loop
+```
+
+```bash
+# Use an explicit config INI for --play-rom-tokens:
+python3 example.py --rom "avs_170" --play-rom-tokens --config-ini ~/.local/share/VPinballX/10.8/directoutputconfig/directoutputconfig30.ini
+```
+
+```bash
 # With debug logging and a custom base path:
 python3 example.py --rom "5th Element" --base-path ~/.local/share/VPinballX/10.8 --debug
 ```

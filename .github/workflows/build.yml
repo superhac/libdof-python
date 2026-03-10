@@ -214,6 +214,7 @@ jobs:
           cp dof.py dist/
           cp example.py dist/
           cp dof_runner.py dist/
+          cp ledcontrol_pull.py dist/
 
       - name: Collect artifacts (Windows)
         if: runner.os == 'Windows'
@@ -226,6 +227,7 @@ jobs:
           cp dof.py dist/
           cp example.py dist/
           cp dof_runner.py dist/
+          cp ledcontrol_pull.py dist/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

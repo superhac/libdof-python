@@ -129,6 +129,11 @@ if not param_directoutputconfigpath:
     param_directoutputconfigpath = _default_base_path()
 
 
+def status(message: str) -> None:
+    """Always-visible status output for key pull stages."""
+    print(message)
+
+
 # -------------------------------------------------
 # Banner
 # -------------------------------------------------
@@ -165,14 +170,18 @@ if not os.path.isdir(param_directoutputconfigpath):
 # -------------------------------------------------
 # Always fetch the online version (needed for INI update after download too)
 # -------------------------------------------------
-if param_debug or param_verbose:
-    print("**** Requesting Online Version ****")
+status("Retrieving online version...")
+try:
+    r = requests.get(version_url, headers=headers)
+except requests.RequestException as e:
+    print(f"** Failed to retrieve online version: {e}")
+    sys.exit(1)
 
-r = requests.get(version_url, headers=headers)
 if r.status_code == 200 and r.text.strip().isdigit():
     online_version = int(r.text.strip())
+    status(f"Online version retrieved: {online_version}")
 else:
-    print("** Error: Unable to get version.")
+    print("** Failed to retrieve online version.")
     sys.exit(1)
 
 if param_debug or param_verbose:
@@ -216,14 +225,18 @@ else:
 # Download
 # -------------------------------------------------
 if bDoDownload:
-    if param_debug or param_verbose:
-        print("**** Requesting File ****")
+    status("Retrieving config archive...")
 
     tmp_fd, zip_path = tempfile.mkstemp(suffix=".zip", prefix="dofconfig_")
     os.close(tmp_fd)
 
     try:
-        r = requests.get(download_url, headers=headers, stream=True)
+        try:
+            r = requests.get(download_url, headers=headers, stream=True)
+        except requests.RequestException as e:
+            print(f"** Failed download: {e}")
+            sys.exit(1)
+
         if param_debug:
             print("STATUS:", r.status_code)
             print("CONTENT-TYPE:", r.headers.get("content-type"))
@@ -232,12 +245,13 @@ if bDoDownload:
             with open(zip_path, "wb") as f:
                 for chunk in r.iter_content(8192):
                     f.write(chunk)
+            status("Successful download.")
         else:
-            print("** Error: Unable to download.")
+            print(f"** Failed download (HTTP {r.status_code}).")
             sys.exit(1)
 
         if not os.path.exists(zip_path) or os.path.getsize(zip_path) < 1024:
-            print("** Error: Archive not downloaded correctly.")
+            print("** Failed download: archive was not downloaded correctly.")
             sys.exit(1)
 
         if param_debug or param_verbose:
@@ -249,8 +263,8 @@ if bDoDownload:
             verbose=(param_debug or param_verbose),
         )
 
+        status("Extracting files...")
         if param_debug or param_verbose:
-            print("**** Extracting Files ****")
             print("From:", zip_path)
             print("To:", param_directoutputconfigpath)
 
@@ -271,5 +285,6 @@ if bDoDownload:
     with open(ini_file, 'w') as f:
         f.write(f'[version]\nversion={online_version}\n')
 
-    if param_verbose:
-        print(f"**** Done — config updated to v{online_version} ****")
+    status(f"Done: config updated to v{online_version}.")
+else:
+    status("No download needed: local configuration is already up to date.")

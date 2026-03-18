@@ -120,7 +120,14 @@ jobs:
       - name: Fetch external dependencies (Windows)
         if: runner.os == 'Windows'
         shell: bash
-        run: bash platforms/${{ matrix.platform }}/${{ matrix.arch }}/external.sh
+        run: |
+          export PATH="/c/Program Files/CMake/bin:$PATH"
+          bash platforms/${{ matrix.platform }}/${{ matrix.arch }}/external.sh
+        env:
+          CC: cl
+          CXX: cl
+          CMAKE_GENERATOR: Visual Studio 17 2022
+          CMAKE_GENERATOR_PLATFORM: x64
         working-directory: libdof
 
       # --------------------------------------------------------------------

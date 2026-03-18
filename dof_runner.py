@@ -134,7 +134,7 @@ class RandomDofRunner:
 
     def _worker_main(self) -> None:
         d: Optional[dof.DOF] = None
-        last_number: Optional[int] = None
+        last_numbers: Optional[tuple[int, int]] = None
         try:
             dof.set_log_callback(self._log_callback)
             dof.set_log_level(dof.LogLevel.DEBUG if self._debug else dof.LogLevel.INFO)
@@ -145,18 +145,22 @@ class RandomDofRunner:
 
             while not self._stop_event.wait(self._random_interval_sec):
                 number = random.randint(self._random_min, self._random_max)
-                if last_number is not None:
-                    d.data_receive("E", last_number, 0)
+                next_number = number + 1
+                if last_numbers is not None:
+                    d.data_receive("E", last_numbers[0], 0)
+                    d.data_receive("E", last_numbers[1], 0)
                 d.data_receive("E", number, self._random_on_value)
-                last_number = number
+                d.data_receive("E", next_number, self._random_on_value)
+                last_numbers = (number, next_number)
         except Exception as exc:
             with self._lock:
                 self._last_error = exc
         finally:
             if d is not None:
-                if last_number is not None:
+                if last_numbers is not None:
                     try:
-                        d.data_receive("E", last_number, 0)
+                        d.data_receive("E", last_numbers[0], 0)
+                        d.data_receive("E", last_numbers[1], 0)
                     except Exception:
                         pass
                 try:
@@ -170,4 +174,3 @@ class RandomDofRunner:
 
             with self._lock:
                 self._thread = None
-

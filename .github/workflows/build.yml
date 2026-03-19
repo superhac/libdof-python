@@ -108,6 +108,7 @@ jobs:
         run: |
           /c/msys64/usr/bin/bash.exe -l -c "pacman -S --noconfirm --needed make diffutils cmake"
           /c/msys64/usr/bin/bash.exe -l -c "pacman -S --noconfirm --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-libwinpthread mingw-w64-x86_64-cmake"
+          /c/msys64/usr/bin/bash.exe -l -c "pacman -S --noconfirm --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-libwinpthread mingw-w64-ucrt-x86_64-cmake"
 
       - name: Patch hidapi build target (Windows)
         if: runner.os == 'Windows'

@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, arm64]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -27,6 +27,16 @@ jobs:
             dof_lib_glob: 'libdof/build/libdof.so*'
             wrapper_lib: libdof_python.so
 
+          # ----------------------------------------------------------------
+          # Linux arm64
+          # ----------------------------------------------------------------
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+            dof_lib_glob: 'libdof/build/libdof.so*'
+            wrapper_lib: libdof_python.so
+          
           # ----------------------------------------------------------------
           # macOS arm64
           # ----------------------------------------------------------------

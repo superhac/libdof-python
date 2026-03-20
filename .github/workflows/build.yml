@@ -33,7 +33,7 @@ jobs:
           - name: Linux arm64
             os: ubuntu-24.04-arm
             platform: linux
-            arch: arm64
+            arch: aarch64
             dof_lib_glob: 'libdof/build/libdof.so*'
             wrapper_lib: libdof_python.so
           

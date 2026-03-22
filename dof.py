@@ -1,7 +1,8 @@
 """
 dof.py — Python wrapper for libdof (https://github.com/jsm174/libdof)
 
-Requires libdof_python.so built from dof_c_api.cpp via build_wrapper.sh.
+Requires libdof_python shared library built from dof_c_api.cpp
+(`.so` on Linux, `.dylib` on macOS, `.dll` on Windows).
 
 Quick start:
     import dof
@@ -20,6 +21,7 @@ Quick start:
 import ctypes
 import ctypes.util
 import os
+import sys
 from enum import IntEnum
 from typing import Callable, Optional
 
@@ -46,18 +48,35 @@ _log_callback_ref = None          # Prevent the ctypes wrapper from being GC'd
 _LogCallbackType = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.c_char_p)
 
 
+def _library_candidates(script_dir: str) -> list[str]:
+    """Return platform-appropriate shared library candidates."""
+    if sys.platform.startswith('win'):
+        names = ['libdof_python.dll', 'dof_python.dll']
+    elif sys.platform == 'darwin':
+        names = ['libdof_python.dylib', 'libdof_python.so']
+    else:
+        names = ['libdof_python.so', 'libdof_python.dylib']
+    return [os.path.join(script_dir, name) for name in names] + names
+
+
+def _prepare_windows_dll_search(script_dir: str) -> None:
+    """Ensure dependent DLLs in this folder are discoverable on Python 3.8+."""
+    if not sys.platform.startswith('win'):
+        return
+    add_dir = getattr(os, 'add_dll_directory', None)
+    if add_dir:
+        add_dir(script_dir)
+
+
 def _load_lib(lib_path: Optional[str] = None) -> ctypes.CDLL:
-    """Load (or return the already-loaded) libdof_python.so."""
+    """Load (or return the already-loaded) wrapper shared library."""
     global _lib
     if _lib is not None:
         return _lib
 
+    script_dir = os.path.dirname(os.path.abspath(__file__))
     if lib_path is None:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        candidates = [
-            os.path.join(script_dir, 'libdof_python.so'),
-            './libdof_python.so',
-        ]
+        candidates = _library_candidates(script_dir)
         for c in candidates:
             if os.path.exists(c):
                 lib_path = c
@@ -65,10 +84,11 @@ def _load_lib(lib_path: Optional[str] = None) -> ctypes.CDLL:
 
     if lib_path is None:
         raise FileNotFoundError(
-            "Cannot find libdof_python.so. "
-            "Run build_wrapper.sh first, or pass lib_path= explicitly."
+            "Cannot find libdof_python shared library (.so/.dylib/.dll). "
+            "Ensure release files are in the same folder, or pass lib_path= explicitly."
         )
 
+    _prepare_windows_dll_search(script_dir)
     _lib = ctypes.CDLL(lib_path)
     _setup_api(_lib)
     return _lib
@@ -116,8 +136,8 @@ def load_lib(lib_path: Optional[str] = None) -> None:
     Optional — the library is loaded lazily on first use if not called.
 
     Args:
-        lib_path: Path to libdof_python.so.  Defaults to ./libdof_python.so
-                  in the same directory as this module.
+        lib_path: Path to libdof_python shared library.
+                  Defaults to a platform-specific filename in this module dir.
     """
     _load_lib(lib_path)
 

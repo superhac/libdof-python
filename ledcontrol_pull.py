@@ -3,6 +3,9 @@ import argparse
 import os
 import sys
 import tempfile
+import platform
+import subprocess
+import re
 import requests
 import zipfile
 
@@ -25,6 +28,12 @@ headers = {
                   "AppleWebKit/537.36 (KHTML, like Gecko) "
                   "Chrome/117.0.0.0 Safari/537.36",
     "Accept": "application/zip,application/octet-stream,application/json;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Connection": "keep-alive",
+    "Referer": "https://configtool.vpuniverse.com/app/",
+    "Origin": "https://configtool.vpuniverse.com",
 }
 
 # -------------------------------------------------
@@ -110,6 +119,119 @@ def status(message: str) -> None:
     print(message)
 
 
+def debug(message: str) -> None:
+    if param_debug:
+        print(message)
+
+
+def _sanitize_headers(headers_map):
+    """Return headers with sensitive values masked for debug output."""
+    sanitized = {}
+    for k, v in headers_map.items():
+        if k.lower() in ("authorization", "cookie", "set-cookie"):
+            sanitized[k] = "<masked>"
+        else:
+            sanitized[k] = v
+    return sanitized
+
+
+def _response_preview(response: requests.Response, limit: int = 300) -> str:
+    try:
+        body = response.text
+    except Exception as e:
+        return f"<unable to decode response body: {e}>"
+
+    body = body.replace("\r", "\\r").replace("\n", "\\n")
+    if len(body) > limit:
+        return body[:limit] + "...(truncated)"
+    return body
+
+
+def debug_http_response(label: str, response: requests.Response) -> None:
+    debug(f"** HTTP DEBUG [{label}]")
+    debug(f"request.method = {response.request.method}")
+    debug(f"request.url = {response.request.url}")
+    debug(f"request.headers = {_sanitize_headers(dict(response.request.headers))}")
+    debug(f"response.url = {response.url}")
+    debug(f"response.status = {response.status_code} {response.reason}")
+    debug(f"response.elapsed_ms = {int(response.elapsed.total_seconds() * 1000)}")
+    debug(f"response.headers = {_sanitize_headers(dict(response.headers))}")
+    debug(f"response.history_count = {len(response.history)}")
+    for idx, h in enumerate(response.history, start=1):
+        debug(f"response.history[{idx}] = {h.status_code} {h.reason} -> {h.url}")
+    debug(f"response.body.preview = {_response_preview(response)}")
+
+
+def _windows_vbs_helper_path() -> str:
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "ledcontrol_pull_win.vbs")
+
+
+def _run_windows_vbs_helper(mode: str, apikey: str = "", zip_file: str = "") -> tuple[str, str]:
+    helper = _windows_vbs_helper_path()
+    if not os.path.isfile(helper):
+        raise RuntimeError(f"Windows helper script not found: {helper}")
+
+    cmd = ["cscript", "//nologo", helper, f"/M={mode}"]
+    if apikey:
+        cmd.append(f"/A={apikey}")
+    if zip_file:
+        cmd.append(f"/F={zip_file}")
+    if param_debug:
+        cmd.append("/D")
+
+    debug(f"** Windows helper command = {' '.join(cmd)}")
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=False, check=False)
+    except OSError as e:
+        raise RuntimeError(f"Unable to run cscript/VBS helper: {e}")
+
+    def _decode_output(raw: bytes) -> str:
+        if not raw:
+            return ""
+        for enc in ("utf-8", "utf-16-le", "utf-16", "mbcs", "cp1252", "latin-1"):
+            try:
+                return raw.decode(enc)
+            except Exception:
+                continue
+        return raw.decode("latin-1", errors="replace")
+
+    stdout_text = _decode_output(p.stdout).replace("\x00", "")
+    stderr_text = _decode_output(p.stderr).replace("\x00", "")
+
+    if param_debug:
+        debug(f"** Windows helper exit code = {p.returncode}")
+        if stdout_text.strip():
+            debug(f"** Windows helper stdout:\n{stdout_text.rstrip()}")
+        if stderr_text.strip():
+            debug(f"** Windows helper stderr:\n{stderr_text.rstrip()}")
+
+    if p.returncode != 0:
+        err_text = stderr_text.strip() or stdout_text.strip() or "no output"
+        raise RuntimeError(f"Windows helper failed (exit {p.returncode}): {err_text}")
+
+    return stdout_text, stderr_text
+
+
+def _windows_get_online_version(apikey: str) -> int:
+    stdout_text, stderr_text = _run_windows_vbs_helper("version", apikey=apikey)
+    combined = "\n".join(part for part in (stdout_text, stderr_text) if part)
+    lines = [line.strip() for line in combined.splitlines() if line.strip()]
+    for line in reversed(lines):
+        if line.isdigit():
+            return int(line)
+    m = re.search(r"\b(\d+)\b", combined)
+    if m:
+        return int(m.group(1))
+    raise RuntimeError(
+        "Windows helper did not return a numeric version. "
+        f"stdout=[{stdout_text.strip()}] stderr=[{stderr_text.strip()}]"
+    )
+
+
+def _windows_download_zip(apikey: str, zip_file: str) -> None:
+    _run_windows_vbs_helper("download", apikey=apikey, zip_file=zip_file)
+
+
 # -------------------------------------------------
 # Banner
 # -------------------------------------------------
@@ -123,6 +245,9 @@ if param_debug:
     print("apikey =", param_apikey)
     print("savefile =", param_savefile)
     print("target =", param_directoutputconfigpath)
+    print("platform =", platform.platform())
+    print("python =", sys.version.replace("\n", " "))
+    print("requests =", requests.__version__)
 
 
 # -------------------------------------------------
@@ -130,6 +255,7 @@ if param_debug:
 # -------------------------------------------------
 version_url = "https://configtool.vpuniverse.com/api.php?query=version"
 download_url = f"https://configtool.vpuniverse.com/api.php?query=getconfig&apikey={param_apikey}"
+site_root_url = "https://configtool.vpuniverse.com/"
 
 
 # -------------------------------------------------
@@ -147,18 +273,41 @@ if not os.path.isdir(param_directoutputconfigpath):
 # Always fetch the online version (needed for INI update after download too)
 # -------------------------------------------------
 status("Retrieving online version...")
-try:
-    r = requests.get(version_url, headers=headers)
-except requests.RequestException as e:
-    print(f"** Failed to retrieve online version: {e}")
-    sys.exit(1)
-
-if r.status_code == 200 and r.text.strip().isdigit():
-    online_version = int(r.text.strip())
-    status(f"Online version retrieved: {online_version}")
+session = None
+if sys.platform == "win32":
+    try:
+        online_version = _windows_get_online_version(param_apikey)
+        status(f"Online version retrieved: {online_version}")
+    except Exception as e:
+        print(f"** Failed to retrieve online version: {e}")
+        sys.exit(1)
 else:
-    print("** Failed to retrieve online version.")
-    sys.exit(1)
+    session = requests.Session()
+    session.headers.update(headers)
+
+    # Preflight homepage hit to establish any bot/WAF cookies before API calls.
+    try:
+        preflight = session.get(site_root_url, timeout=20)
+        debug_http_response("preflight", preflight)
+    except requests.RequestException as e:
+        debug(f"** Preflight request failed: {type(e).__name__}: {e}")
+
+    try:
+        r = session.get(version_url, timeout=20)
+    except requests.RequestException as e:
+        print(f"** Failed to retrieve online version: {type(e).__name__}: {e}")
+        sys.exit(1)
+
+    debug_http_response("version", r)
+
+    if r.status_code == 200 and r.text.strip().isdigit():
+        online_version = int(r.text.strip())
+        status(f"Online version retrieved: {online_version}")
+    else:
+        print("** Failed to retrieve online version.")
+        print(f"   HTTP status: {r.status_code} {r.reason}")
+        print(f"   Response preview: {_response_preview(r, limit=200)}")
+        sys.exit(1)
 
 if param_debug or param_verbose:
     print("Online Version =", online_version)
@@ -207,27 +356,52 @@ if bDoDownload:
     os.close(tmp_fd)
 
     try:
-        try:
-            r = requests.get(download_url, headers=headers, stream=True)
-        except requests.RequestException as e:
-            print(f"** Failed download: {e}")
-            sys.exit(1)
-
-        if param_debug:
-            print("STATUS:", r.status_code)
-            print("CONTENT-TYPE:", r.headers.get("content-type"))
-
-        if r.status_code == 200:
-            with open(zip_path, "wb") as f:
-                for chunk in r.iter_content(8192):
-                    f.write(chunk)
-            status("Successful download.")
+        if sys.platform == "win32":
+            try:
+                _windows_download_zip(param_apikey, zip_path)
+                status("Successful download.")
+            except Exception as e:
+                print(f"** Failed download: {e}")
+                sys.exit(1)
         else:
-            print(f"** Failed download (HTTP {r.status_code}).")
+            try:
+                r = session.get(download_url, stream=True, timeout=40)
+            except requests.RequestException as e:
+                print(f"** Failed download: {type(e).__name__}: {e}")
+                sys.exit(1)
+
+            debug_http_response("download", r)
+
+            if r.status_code == 200:
+                with open(zip_path, "wb") as f:
+                    for chunk in r.iter_content(8192):
+                        f.write(chunk)
+                status("Successful download.")
+            else:
+                print(f"** Failed download (HTTP {r.status_code}).")
+                print(f"   Response preview: {_response_preview(r, limit=200)}")
+                sys.exit(1)
+
+        if not os.path.exists(zip_path):
+            print("** Failed download: archive file was not created.")
             sys.exit(1)
 
-        if not os.path.exists(zip_path) or os.path.getsize(zip_path) < 1024:
-            print("** Failed download: archive was not downloaded correctly.")
+        zip_size = os.path.getsize(zip_path)
+        debug(f"** Downloaded archive size: {zip_size} bytes")
+        if zip_size <= 0:
+            print("** Failed download: archive file is empty.")
+            sys.exit(1)
+
+        if not zipfile.is_zipfile(zip_path):
+            print("** Failed download: response is not a valid ZIP archive.")
+            if param_debug:
+                try:
+                    with open(zip_path, "rb") as f:
+                        sample = f.read(240)
+                    sample_text = sample.decode("utf-8", errors="replace").replace("\r", "\\r").replace("\n", "\\n")
+                    debug(f"** Archive preview (decoded): {sample_text}")
+                except Exception as e:
+                    debug(f"** Could not read archive preview: {e}")
             sys.exit(1)
 
         status("Extracting files...")

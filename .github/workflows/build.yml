@@ -253,6 +253,7 @@ jobs:
           cp example.py dist/
           cp dof_runner.py dist/
           cp ledcontrol_pull.py dist/
+          cp ledcontrol_pull_win.vbs dist/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

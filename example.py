@@ -201,6 +201,16 @@ def _run_token_sequence(
                 pass
 
 
+def _parse_event_arg(event_text: str) -> tuple[str, int]:
+    event = event_text.strip().upper()
+    m = re.fullmatch(r'([A-Z])(\d+)', event)
+    if not m:
+        raise ValueError(
+            f'Invalid event "{event_text}". Expected format like E905, S27, or W1.'
+        )
+    return m.group(1), int(m.group(2))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description='Initialize DOF for a ROM and hold until quit key.')
     parser.add_argument('--rom', required=True, help='ROM name/key (spaces are normalized to underscores)')
@@ -240,6 +250,23 @@ def main() -> None:
         action='store_true',
         help='Parse tokens from the ROM row in directoutputconfig*.ini and play them sequentially.',
     )
+    parser.add_argument(
+        '--event',
+        default='',
+        help='Fire one event once, like E905 or S27, then exit.',
+    )
+    parser.add_argument(
+        '--event-on-sec',
+        type=float,
+        default=0.5,
+        help='Seconds the one-shot --event stays ON before turning OFF (default: 0.5).',
+    )
+    parser.add_argument(
+        '--event-on-value',
+        type=int,
+        default=1,
+        help='ON value used for one-shot --event mode (default: 1).',
+    )
     parser.add_argument('--config-ini', default='', help='Optional explicit ini path for --play-rom-tokens')
     parser.add_argument(
         '--token-on-sec',
@@ -265,8 +292,9 @@ def main() -> None:
         help='Loop parsed tokens continuously in --play-rom-tokens mode until quit.',
     )
     args = parser.parse_args()
-    if args.random_e and args.play_rom_tokens:
-        parser.error('--random-e and --play-rom-tokens are mutually exclusive')
+    enabled_modes = sum(bool(mode) for mode in (args.random_e, args.play_rom_tokens, args.event))
+    if enabled_modes > 1:
+        parser.error('--random-e, --play-rom-tokens, and --event are mutually exclusive')
     if args.random_min < 0:
         parser.error('--random-min must be >= 0')
     if args.random_max < 0:
@@ -277,6 +305,10 @@ def main() -> None:
         parser.error('--random-on-value must be >= 0')
     if args.random_interval_sec <= 0:
         parser.error('--random-interval-sec must be > 0')
+    if args.event_on_sec <= 0:
+        parser.error('--event-on-sec must be > 0')
+    if args.event_on_value < 0:
+        parser.error('--event-on-value must be >= 0')
     if args.token_on_sec <= 0:
         parser.error('--token-on-sec must be > 0')
     if args.token_off_sec < 0:
@@ -293,6 +325,24 @@ def main() -> None:
     with dof.DOF() as d:
         print(f'Initializing ROM: {args.rom} (key={rom_key})')
         d.init(rom_key)
+        if args.event:
+            try:
+                type_char, number = _parse_event_arg(args.event)
+            except ValueError as exc:
+                parser.error(str(exc))
+            print(
+                'One-shot event mode enabled: '
+                f'event={type_char}{number}, on_value={args.event_on_value}, '
+                f'on_sec={args.event_on_sec:.3f}'
+            )
+            d.data_receive(type_char, number, args.event_on_value)
+            try:
+                threading.Event().wait(args.event_on_sec)
+            finally:
+                d.data_receive(type_char, number, 0)
+                d.finish()
+            print('Done.')
+            return
         random_thread: threading.Thread | None = None
         random_stop_event = threading.Event()
         token_thread: threading.Thread | None = None

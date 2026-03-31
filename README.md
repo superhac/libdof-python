@@ -121,6 +121,11 @@ python3 example.py --rom "5th Element" --random-e
 ```
 
 ```bash
+# Fire one event once, then exit:
+python3 example.py --rom "5th Element" --event E905 --event-on-sec 0.5 --event-on-value 1
+```
+
+```bash
 # Custom random range and timing:
 python3 example.py --rom "5th Element" --random-e --random-min 900 --random-max 990 --random-interval-sec 0.2 --random-on-value 1
 ```

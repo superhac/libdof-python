@@ -15,10 +15,8 @@ Usage:
 
 from __future__ import annotations
 
-import glob
 import os
 import random
-import re
 import sys
 import threading
 from typing import Callable, Optional
@@ -44,94 +42,6 @@ def _default_log_handler(level: dof.LogLevel, message: str) -> None:
         dof.LogLevel.DEBUG: "[DEBUG]",
     }.get(level, "[?????]")
     print(f"{tag} {message}")
-
-
-def _split_csv_with_paren_guard(line: str) -> list[str]:
-    parts: list[str] = []
-    depth = 0
-    start = 0
-    for idx, ch in enumerate(line):
-        if ch == "(":
-            depth += 1
-        elif ch == ")":
-            depth = max(0, depth - 1)
-        elif ch == "," and depth == 0:
-            parts.append(line[start:idx].strip())
-            start = idx + 1
-    parts.append(line[start:].strip())
-    return parts
-
-
-def _parse_trigger_tokens(token_expr: str) -> list[tuple[str, int]]:
-    settings = [s.strip() for s in token_expr.split("/") if s.strip()]
-    out: list[tuple[str, int]] = []
-    seen: set[tuple[str, int]] = set()
-    for setting in settings:
-        if setting.startswith("("):
-            continue
-        trigger = setting.split(" ", 1)[0].strip()
-        trigger_parts = [p.strip() for p in trigger.split("|") if p.strip()]
-        for part in trigger_parts:
-            m = re.fullmatch(r"([A-Za-z])(\d+)", part)
-            if not m:
-                continue
-            event = (m.group(1).upper(), int(m.group(2)))
-            if event not in seen:
-                seen.add(event)
-                out.append(event)
-    return out
-
-
-def _resolve_config_ini(base_path: str) -> str:
-    cfg_dir = os.path.join(base_path, "directoutputconfig")
-    if not os.path.isdir(cfg_dir):
-        raise FileNotFoundError(f"Config directory not found: {cfg_dir}")
-
-    preferred = [
-        os.path.join(cfg_dir, "directoutputconfig30.ini"),
-        os.path.join(cfg_dir, "directoutputconfig40.ini"),
-        os.path.join(cfg_dir, "directoutputconfig.ini"),
-        os.path.join(cfg_dir, "ledcontrol.ini"),
-    ]
-    for path in preferred:
-        if os.path.isfile(path):
-            return path
-
-    candidates = sorted(glob.glob(os.path.join(cfg_dir, "directoutputconfig*.ini")))
-    if not candidates:
-        candidates = sorted(glob.glob(os.path.join(cfg_dir, "ledcontrol*.ini")))
-    if not candidates:
-        raise FileNotFoundError(f"No directoutputconfig*.ini or ledcontrol*.ini found in {cfg_dir}")
-    return candidates[0]
-
-
-def _find_rom_row(ini_path: str, rom_key: str) -> list[str]:
-    in_config = False
-    with open(ini_path, "r", encoding="utf-8", errors="ignore") as f:
-        for raw in f:
-            line = raw.strip()
-            if not line:
-                continue
-            if line.startswith("[") and line.endswith("]"):
-                section = line.lower()
-                in_config = section in ("[config dof]", "[config outs]")
-                continue
-            if not in_config or line.startswith("#"):
-                continue
-            cols = _split_csv_with_paren_guard(line)
-            if cols and cols[0].strip().strip('"').lower() == rom_key.lower():
-                return cols
-    raise ValueError(f'ROM "{rom_key}" not found in {ini_path} [Config DOF]/[Config outs]')
-
-
-def _collect_rom_e_numbers(ini_path: str, rom_key: str) -> set[int]:
-    row = _find_rom_row(ini_path, rom_key)
-    e_numbers: set[int] = set()
-    for col_expr in row[1:]:
-        for type_char, number in _parse_trigger_tokens(col_expr):
-            if type_char == "E":
-                e_numbers.add(number)
-    return e_numbers
 
 
 class RandomDofRunner:
@@ -228,7 +138,7 @@ class RandomDofRunner:
 
     def _worker_main(self) -> None:
         d: Optional[dof.DOF] = None
-        last_numbers: Optional[tuple[int, int]] = None
+        last_number: Optional[int] = None
         try:
             dof.set_log_callback(self._log_callback)
             dof.set_log_level(dof.LogLevel.DEBUG if self._debug else dof.LogLevel.INFO)
@@ -236,42 +146,20 @@ class RandomDofRunner:
 
             d = dof.DOF()
             d.init(self._rom_key)
-            pair_starts: Optional[list[int]] = None
-            if self._only_existing_pairs:
-                ini_path = self._config_ini if self._config_ini else _resolve_config_ini(self._base_path)
-                e_numbers = _collect_rom_e_numbers(ini_path, self._rom_key)
-                pair_starts = sorted(
-                    number
-                    for number in e_numbers
-                    if self._random_min <= number <= self._random_max and (number + 1) in e_numbers
-                )
-                if not pair_starts:
-                    raise ValueError(
-                        f'No valid E-pairs (N and N+1) found for ROM "{self._rom_key}" '
-                        f"in range {self._random_min}-{self._random_max}"
-                    )
-
             while not self._stop_event.wait(self._random_interval_sec):
-                if pair_starts is None:
-                    number = random.randint(self._random_min, self._random_max)
-                else:
-                    number = random.choice(pair_starts)
-                next_number = number + 1
-                if last_numbers is not None:
-                    d.data_receive("E", last_numbers[0], 0)
-                    d.data_receive("E", last_numbers[1], 0)
+                number = random.randint(self._random_min, self._random_max)
+                if last_number is not None:
+                    d.data_receive("E", last_number, 0)
                 d.data_receive("E", number, self._random_on_value)
-                d.data_receive("E", next_number, self._random_on_value)
-                last_numbers = (number, next_number)
+                last_number = number
         except Exception as exc:
             with self._lock:
                 self._last_error = exc
         finally:
             if d is not None:
-                if last_numbers is not None:
+                if last_number is not None:
                     try:
-                        d.data_receive("E", last_numbers[0], 0)
-                        d.data_receive("E", last_numbers[1], 0)
+                        d.data_receive("E", last_number, 0)
                     except Exception:
                         pass
                 try:

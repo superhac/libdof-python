@@ -1,0 +1,80 @@
+{
+  "events": {
+    "5th_element": {
+      "loop": true,
+      "cycle_ms": 10001,
+      "actions": [
+        { "at_ms": 0, "ini_event": "E103", "value": 255 },
+        { "at_ms": 2000, "ini_event": "E103", "value": 0 },
+
+        { "at_ms": 2000, "ini_event": "E105", "value": 255 },
+        { "at_ms": 4000, "ini_event": "E105", "value": 0 },
+
+        { "at_ms": 4000, "ini_event": "E531", "value": 255 },
+        { "at_ms": 6000, "ini_event": "E531", "value": 0 },
+
+        { "at_ms": 6000, "ini_event": "E108", "value": 255 },
+        { "at_ms": 8000, "ini_event": "E108", "value": 0 },
+
+        { "at_ms": 8000, "ini_event": "E109", "value": 255 },
+        { "at_ms": 10000, "ini_event": "E109", "value": 0 }
+      ]
+    },
+  "atlantis": {
+      "loop": true,
+      "cycle_ms": 10001,
+      "actions": [
+        { "at_ms": 2000, "ini_event": "W16", "value": 255 },
+        { "at_ms": 4000, "ini_event": "W16", "value": 0 },
+
+        { "at_ms": 4000, "ini_event": "W400", "value": 255 },
+        { "at_ms": 6000, "ini_event": "W400", "value": 0 }
+      ]
+  },
+  "avs_170": {
+      "loop": true,
+      "cycle_ms": 501,
+      "actions": [
+        { "at_ms": 0, "ini_event": "S13", "value": 255 },
+        { "at_ms": 0, "ini_event": "W24", "value": 255 },
+        { "at_ms": 0, "ini_event": "W25", "value": 255 },
+        { "at_ms": 0, "ini_event": "S1", "value": 255 },
+        { "at_ms": 0, "ini_event": "W28", "value": 255 },
+        { "at_ms": 0, "ini_event": "W23", "value": 255 },
+        { "at_ms": 0, "ini_event": "S2", "value": 255 },
+        { "at_ms": 0, "ini_event": "S14", "value": 255 },
+
+        { "at_ms": 500, "ini_event": "S13", "value": 0 },
+        { "at_ms": 500, "ini_event": "S14", "value": 0 },
+        { "at_ms": 500, "ini_event": "W24", "value": 0 },
+        { "at_ms": 500, "ini_event": "W25", "value": 0 },
+        { "at_ms": 500, "ini_event": "S1", "value": 0 },
+        { "at_ms": 500, "ini_event": "W28", "value": 0 },
+        { "at_ms": 500, "ini_event": "W23", "value": 0 },
+        { "at_ms": 500, "ini_event": "S2", "value": 0 }
+
+      ]
+  },
+      "ft": {
+      "loop": true,
+      "cycle_ms": 3000,
+      "actions": [
+        { "at_ms": 0,    "ini_event": "S4",  "value": 255 },
+        { "at_ms": 0,    "ini_event": "W25", "value": 255 },
+        { "at_ms": 0,    "ini_event": "W26", "value": 255 },
+
+        { "at_ms": 1200, "ini_event": "S4",  "value": 0 },
+        { "at_ms": 1200, "ini_event": "W25", "value": 0 },
+        { "at_ms": 1200, "ini_event": "W26", "value": 0 }
+      ]
+    },
+    "w25_motion_test": {
+      "loop": true,
+      "cycle_ms": 501,
+      "actions": [
+        { "at_ms": 0, "ini_event": "W26", "value": 255 },
+        { "at_ms": 500, "ini_event": "W26", "value": 0 }
+      ]
+    }
+}
+}

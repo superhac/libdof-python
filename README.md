@@ -126,8 +126,18 @@ python3 example.py --rom "5th Element" --event E905 --event-on-sec 0.5 --event-o
 ```
 
 ```bash
+# Play a numeric event range in sequence:
+python3 example.py --rom "5th Element" --event-range E900-E990 --range-on-sec 0.2 --range-on-value 1
+```
+
+```bash
 # Custom random range and timing:
 python3 example.py --rom "5th Element" --random-e --random-min 900 --random-max 990 --random-interval-sec 0.2 --random-on-value 1
+```
+
+```bash
+# Loop an event range continuously until quit:
+python3 example.py --rom "5th Element" --event-range E900-E990 --range-loop --range-on-sec 0.2 --range-off-sec 0.05
 ```
 
 ```bash
@@ -184,6 +194,31 @@ Important lifecycle behavior:
 - `start()` creates a fresh DOF instance and calls `init()`.
 - `stop()` always signals the worker thread, turns off the last random event, and calls `finish()` + `destroy()`.
 - This is designed so your app can release DOF/controller resources before another DOF client starts.
+
+`dof_runner.py` also includes `SingleEventDofRunner` for apps that want one active event at a time without managing DOF lifecycle themselves:
+
+```python
+from dof_runner import SingleEventDofRunner
+
+runner = SingleEventDofRunner(
+    rom="pinupmenu",
+    default_on_value=1,
+)
+
+runner.start()
+runner.send_event("E", 905)
+runner.send_event_token("E906")
+runner.stop_event()
+runner.stop()
+```
+
+`SingleEventDofRunner` behavior:
+- `start()` creates one DOF instance and keeps it ready.
+- `send_event()` turns on one event and leaves it on.
+- `send_event_token()` accepts shorthand tokens like `E905`.
+- Sending a new event turns the previous event off first, then turns the new one on.
+- `stop_event()` turns off the current event but keeps the runner alive.
+- `stop()` shuts the worker down and calls `finish()` + `destroy()`.
 
 ### Step 6 — Run custom, switchable output sequences from a file
 

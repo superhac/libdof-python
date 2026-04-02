@@ -201,6 +201,40 @@ def _run_token_sequence(
                 pass
 
 
+def _run_event_range_sequence(
+    d: dof.DOF,
+    stop_event: threading.Event,
+    type_char: str,
+    start_number: int,
+    end_number: int,
+    on_value: int,
+    on_sec: float,
+    off_sec: float,
+    loop: bool,
+) -> None:
+    try:
+        while not stop_event.is_set():
+            for number in range(start_number, end_number + 1):
+                if stop_event.is_set():
+                    return
+                d.data_receive(type_char, number, on_value)
+                if stop_event.wait(on_sec):
+                    d.data_receive(type_char, number, 0)
+                    return
+                d.data_receive(type_char, number, 0)
+                if stop_event.wait(off_sec):
+                    return
+            if not loop:
+                return
+    finally:
+        # Best-effort cleanup: force the full range OFF.
+        for number in range(start_number, end_number + 1):
+            try:
+                d.data_receive(type_char, number, 0)
+            except Exception:
+                pass
+
+
 def _parse_event_arg(event_text: str) -> tuple[str, int]:
     event = event_text.strip().upper()
     m = re.fullmatch(r'([A-Z])(\d+)', event)
@@ -209,6 +243,25 @@ def _parse_event_arg(event_text: str) -> tuple[str, int]:
             f'Invalid event "{event_text}". Expected format like E905, S27, or W1.'
         )
     return m.group(1), int(m.group(2))
+
+
+def _parse_event_range_arg(range_text: str) -> tuple[str, int, int]:
+    text = range_text.strip().upper()
+    m = re.fullmatch(r'([A-Z])(\d+)\s*-\s*([A-Z])(\d+)', text)
+    if not m:
+        raise ValueError(
+            f'Invalid event range "{range_text}". Expected format like E900-E990.'
+        )
+    start_type, start_number, end_type, end_number = m.group(1), int(m.group(2)), m.group(3), int(m.group(4))
+    if start_type != end_type:
+        raise ValueError(
+            f'Invalid event range "{range_text}". Start and end event types must match.'
+        )
+    if start_number > end_number:
+        raise ValueError(
+            f'Invalid event range "{range_text}". Start number must be <= end number.'
+        )
+    return start_type, start_number, end_number
 
 
 def main() -> None:
@@ -251,6 +304,11 @@ def main() -> None:
         help='Parse tokens from the ROM row in directoutputconfig*.ini and play them sequentially.',
     )
     parser.add_argument(
+        '--event-range',
+        default='',
+        help='Play a numeric event range in sequence, like E900-E990.',
+    )
+    parser.add_argument(
         '--event',
         default='',
         help='Fire one event once, like E905 or S27, then exit.',
@@ -291,10 +349,33 @@ def main() -> None:
         action='store_true',
         help='Loop parsed tokens continuously in --play-rom-tokens mode until quit.',
     )
+    parser.add_argument(
+        '--range-on-sec',
+        type=float,
+        default=0.2,
+        help='Seconds each event stays ON in --event-range mode (default: 0.2).',
+    )
+    parser.add_argument(
+        '--range-off-sec',
+        type=float,
+        default=0.0,
+        help='Seconds to wait after each event turns OFF in --event-range mode (default: 0.0).',
+    )
+    parser.add_argument(
+        '--range-on-value',
+        type=int,
+        default=1,
+        help='ON value used in --event-range mode (default: 1).',
+    )
+    parser.add_argument(
+        '--range-loop',
+        action='store_true',
+        help='Loop the --event-range continuously until quit.',
+    )
     args = parser.parse_args()
-    enabled_modes = sum(bool(mode) for mode in (args.random_e, args.play_rom_tokens, args.event))
+    enabled_modes = sum(bool(mode) for mode in (args.random_e, args.play_rom_tokens, args.event_range, args.event))
     if enabled_modes > 1:
-        parser.error('--random-e, --play-rom-tokens, and --event are mutually exclusive')
+        parser.error('--random-e, --play-rom-tokens, --event-range, and --event are mutually exclusive')
     if args.random_min < 0:
         parser.error('--random-min must be >= 0')
     if args.random_max < 0:
@@ -315,6 +396,12 @@ def main() -> None:
         parser.error('--token-off-sec must be >= 0')
     if args.token_on_value < 0:
         parser.error('--token-on-value must be >= 0')
+    if args.range_on_sec <= 0:
+        parser.error('--range-on-sec must be > 0')
+    if args.range_off_sec < 0:
+        parser.error('--range-off-sec must be >= 0')
+    if args.range_on_value < 0:
+        parser.error('--range-on-value must be >= 0')
 
     dof.set_log_callback(log_handler)
     dof.set_log_level(dof.LogLevel.DEBUG if args.debug else dof.LogLevel.INFO)
@@ -347,6 +434,8 @@ def main() -> None:
         random_stop_event = threading.Event()
         token_thread: threading.Thread | None = None
         token_stop_event = threading.Event()
+        range_thread: threading.Thread | None = None
+        range_stop_event = threading.Event()
         if args.random_e:
             print(
                 'Random E mode enabled: '
@@ -394,6 +483,33 @@ def main() -> None:
                 daemon=True,
             )
             token_thread.start()
+        elif args.event_range:
+            try:
+                type_char, start_number, end_number = _parse_event_range_arg(args.event_range)
+            except ValueError as exc:
+                parser.error(str(exc))
+            print(
+                'Event range mode enabled: '
+                f'range={type_char}{start_number}-{type_char}{end_number}, '
+                f'on_value={args.range_on_value}, on_sec={args.range_on_sec:.3f}, '
+                f'off_sec={args.range_off_sec:.3f}, loop={"yes" if args.range_loop else "no"}'
+            )
+            range_thread = threading.Thread(
+                target=_run_event_range_sequence,
+                args=(
+                    d,
+                    range_stop_event,
+                    type_char,
+                    start_number,
+                    end_number,
+                    args.range_on_value,
+                    args.range_on_sec,
+                    args.range_off_sec,
+                    args.range_loop,
+                ),
+                daemon=True,
+            )
+            range_thread.start()
         try:
             _wait_for_quit_key()
         except KeyboardInterrupt:
@@ -405,6 +521,9 @@ def main() -> None:
             if token_thread is not None:
                 token_stop_event.set()
                 token_thread.join(timeout=max(1.0, (args.token_on_sec + args.token_off_sec) * 2.0))
+            if range_thread is not None:
+                range_stop_event.set()
+                range_thread.join(timeout=max(1.0, (args.range_on_sec + args.range_off_sec) * 2.0))
             d.finish()
 
     print('Done.')

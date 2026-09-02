@@ -51,7 +51,7 @@ jobs:
           # Windows x64
           # ----------------------------------------------------------------
           - name: Windows x64
-            os: windows-latest
+            os: windows-2022
             platform: win
             arch: x64
             dof_lib_glob: 'libdof/build/Release/dof64.dll'

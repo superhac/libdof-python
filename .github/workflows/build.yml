@@ -71,7 +71,7 @@ jobs:
       - name: Checkout libdof
         uses: actions/checkout@v4
         with:
-          repository: jsm174/libdof
+          repository: vpinball/libdof
           path: libdof
 
       # --------------------------------------------------------------------

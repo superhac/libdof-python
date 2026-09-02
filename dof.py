@@ -1,5 +1,5 @@
 """
-dof.py — Python wrapper for libdof (https://github.com/jsm174/libdof)
+dof.py — Python wrapper for libdof (https://github.com/vpinball/libdof)
 
 Requires libdof_python shared library built from dof_c_api.cpp
 (`.so` on Linux, `.dylib` on macOS, `.dll` on Windows).

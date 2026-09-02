@@ -1,6 +1,6 @@
 # libdof Python Wrapper
 
-A Python wrapper for [libdof](https://github.com/jsm174/libdof), the cross-platform C++ Direct Output Framework library for virtual pinball cabinet feedback devices (LEDs, solenoids, motors, etc.).
+A Python wrapper for [libdof](https://github.com/vpinball/libdof), the cross-platform C++ Direct Output Framework library for virtual pinball cabinet feedback devices (LEDs, solenoids, motors, etc.).
 
 ## Files
 
@@ -27,7 +27,7 @@ A Python wrapper for [libdof](https://github.com/jsm174/libdof), the cross-platf
 ### Step 1 — Clone and build libdof
 
 ```bash
-git clone https://github.com/jsm174/libdof
+git clone https://github.com/vpinball/libdof
 cd libdof
 platforms/linux/x64/external.sh
 cmake -DPLATFORM=linux -DARCH=x64 -DCMAKE_BUILD_TYPE=Release -B build
@@ -394,4 +394,4 @@ Python (ctypes)
 
 ## Acknowledgements
 
-Big thanks to **[jsm174](https://github.com/jsm174)** for his incredible work porting the DirectOutput Framework from C# to C++, making DOF available on Linux, macOS, and other platforms for the first time. Without his cross-platform [libdof](https://github.com/jsm174/libdof) library this wrapper would not exist.
+Big thanks to the **[Visual Pinball](https://github.com/vpinball)** project for maintaining the cross-platform [libdof](https://github.com/vpinball/libdof) library this wrapper uses.
